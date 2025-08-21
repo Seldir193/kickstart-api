@@ -111,9 +111,6 @@ router.delete('/:id', adminAuth, async (req, res) => {
 });
 
 
-
-
-
 // Confirm + send PDF (ADMIN) — idempotent, Resend via ?resend=1
 router.post('/:id/confirm', adminAuth, async (req, res) => {
   try {
