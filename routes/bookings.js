@@ -69,21 +69,81 @@ router.get('/', adminAuth, async (req, res) => {
   }
 });
 
-// Change status (ADMIN)
+
+
+
+// Change status (ADMIN)  ✅ send cancellation mail on first switch to "cancelled"
 router.patch('/:id/status', adminAuth, async (req, res) => {
   try {
     const { status } = req.body || {};
     if (!ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({ ok: false, code: 'VALIDATION', error: 'Invalid status' });
     }
-    const updated = await Booking.findByIdAndUpdate(req.params.id, { status }, { new: true });
+
+    // Vorherigen Status laden, um Dopplungs-Mails zu vermeiden
+    const prev = await Booking.findById(req.params.id);
+    if (!prev) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
+
+    const updated = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
     if (!updated) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
+
+    // Nur wenn jetzt "cancelled" und vorher NICHT "cancelled": Storno-Mail senden
+    if (status === 'cancelled' && prev.status !== 'cancelled') {
+      const fullName = updated.fullName || `${updated.firstName} ${updated.lastName}`.trim();
+      const program  = updated.program  || updated.level;
+      const dateDE   = fmtDE(updated.date);
+
+      try {
+        await sendMail({
+          to: updated.email,
+          subject: `Stornierung – ${program} am ${dateDE}${updated.confirmationCode ? ` (${updated.confirmationCode})` : ''}`,
+          text: `
+Hallo ${fullName},
+
+leider müssen wir deine Buchung stornieren.
+
+Programm: ${program}
+Datum: ${dateDE}${updated.confirmationCode ? `\nBestätigungsnummer: ${updated.confirmationCode}` : ''}
+
+Wenn du Fragen hast, antworte einfach auf diese E-Mail.
+
+Sportliche Grüße
+KickStart Academy
+          `.trim(),
+          html: `
+            <p>Hallo ${fullName},</p>
+            <p>leider müssen wir deine Buchung stornieren.</p>
+            <ul>
+              <li><strong>Programm:</strong> ${program}</li>
+              <li><strong>Datum:</strong> ${dateDE}</li>
+              ${updated.confirmationCode ? `<li><strong>Bestätigungsnummer:</strong> ${updated.confirmationCode}</li>` : ''}
+            </ul>
+            <p>Wenn du Fragen hast, antworte einfach auf diese E-Mail.</p>
+            <p>Sportliche Grüße<br/>KickStart Academy</p>
+          `,
+        });
+        console.log('MAIL SENT: cancellation →', updated.email);
+      } catch (mailErr) {
+        console.warn('Cancellation mail failed:', mailErr?.message || mailErr);
+        // Wir antworten trotzdem 200, damit die UI nicht hängen bleibt
+      }
+    }
+
     return res.json({ ok: true, booking: updated });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
+
+
+
 
 // Admin Notiz (ADMIN)
 router.patch('/:id/note', adminAuth, async (req, res) => {
@@ -97,6 +157,7 @@ router.patch('/:id/note', adminAuth, async (req, res) => {
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
 
 // Soft delete (ADMIN)
 router.delete('/:id', adminAuth, async (req, res) => {
