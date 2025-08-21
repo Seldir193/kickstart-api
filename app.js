@@ -1,4 +1,6 @@
 require('dotenv').config();
+console.log('ADMIN_EMAIL loaded =', JSON.stringify(process.env.ADMIN_EMAIL));
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
