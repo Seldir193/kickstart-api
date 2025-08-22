@@ -7,6 +7,7 @@ const adminAuth = require('../middleware/adminAuth');
 const { bookingPdfBuffer } = require('../utils/pdf');
 const { sendMail } = require('../utils/mailer');
 
+
 const router = express.Router();
 
 /* ----------------------------- Helpers ------------------------------ */
@@ -71,19 +72,21 @@ router.get('/', adminAuth, async (req, res) => {
 
 
 
-
-// Change status (ADMIN)  ✅ send cancellation mail on first switch to "cancelled"
+// Change status (ADMIN) — sends emails on first transition to "cancelled" or "processing"
 router.patch('/:id/status', adminAuth, async (req, res) => {
   try {
     const { status } = req.body || {};
+    const forceMail = String(req.query.force || '') === '1';
+
     if (!ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({ ok: false, code: 'VALIDATION', error: 'Invalid status' });
     }
 
-    // Vorherigen Status laden, um Dopplungs-Mails zu vermeiden
+    // Vorherigen Datensatz laden (für Idempotenz & Mail-Infos)
     const prev = await Booking.findById(req.params.id);
     if (!prev) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
 
+    // Status aktualisieren
     const updated = await Booking.findByIdAndUpdate(
       req.params.id,
       { status },
@@ -91,12 +94,16 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
     );
     if (!updated) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
 
-    // Nur wenn jetzt "cancelled" und vorher NICHT "cancelled": Storno-Mail senden
-    if (status === 'cancelled' && prev.status !== 'cancelled') {
-      const fullName = updated.fullName || `${updated.firstName} ${updated.lastName}`.trim();
-      const program  = updated.program  || updated.level;
-      const dateDE   = fmtDE(updated.date);
+    // Hilfswerte für Mails
+    const fullName = updated.fullName || `${updated.firstName} ${updated.lastName}`.trim();
+    const program  = updated.program  || updated.level;
+    const dateDE   = fmtDE(updated.date);
 
+    let mailSentProcessing = false;
+    let mailSentCancelled  = false;
+
+    /* ------------------------ CANCELLED → Storno-Mail ------------------------ */
+    if (status === 'cancelled' && prev.status !== 'cancelled') {
       try {
         await sendMail({
           to: updated.email,
@@ -126,19 +133,84 @@ KickStart Academy
             <p>Sportliche Grüße<br/>KickStart Academy</p>
           `,
         });
+        mailSentCancelled = true;
         console.log('MAIL SENT: cancellation →', updated.email);
       } catch (mailErr) {
         console.warn('Cancellation mail failed:', mailErr?.message || mailErr);
-        // Wir antworten trotzdem 200, damit die UI nicht hängen bleibt
+        // UI nicht blockieren
       }
     }
 
-    return res.json({ ok: true, booking: updated });
+    /* -------------------- PROCESSING → Mail (idempotent) -------------------- */
+    // Beim ersten Wechsel auf "processing" E-Mail senden; mit ?force=1 auch erneut (für Tests)
+    if (status === 'processing' && (prev.status !== 'processing' || forceMail)) {
+      console.log('[BOOKINGS] processing-mail enter', {
+        id: updated._id.toString(),
+        prev: prev.status,
+        next: status,
+        email: updated.email,
+        forceMail,
+      });
+
+      try {
+        await sendMail({
+          to: updated.email,
+          subject: `In Bearbeitung – ${program} am ${dateDE}${updated.confirmationCode ? ` (${updated.confirmationCode})` : ''}`,
+          html: `
+            <p>Hallo ${fullName},</p>
+            <p>deine Buchung ist aktuell <b>in Bearbeitung</b>.</p>
+            <ul>
+              <li><strong>Programm:</strong> ${program}</li>
+              <li><strong>Datum:</strong> ${dateDE}</li>
+              ${updated.confirmationCode ? `<li><strong>Referenz:</strong> ${updated.confirmationCode}</li>` : '' }
+            </ul>
+            <p>Wir melden uns, sobald es ein Update gibt.</p>
+            <p>Sportliche Grüße<br/>KickStart Academy</p>
+          `,
+          text: `
+Hallo ${fullName},
+
+deine Buchung ist aktuell in Bearbeitung.
+
+Programm: ${program}
+Datum: ${dateDE}${updated.confirmationCode ? `\nReferenz: ${updated.confirmationCode}` : ''}
+
+Wir melden uns, sobald es ein Update gibt.
+
+Sportliche Grüße
+KickStart Academy
+          `.trim(),
+        });
+
+        mailSentProcessing = true;
+        console.log('MAIL SENT: processing →', updated.email);
+      } catch (mailErr) {
+        console.error('[BOOKINGS] processing-mail FAILED:', mailErr?.message || mailErr);
+        // UI nicht blockieren
+      }
+    }
+
+    return res.json({
+      ok: true,
+      booking: updated,
+      mailSentProcessing,
+      mailSentCancelled,
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 
 
