@@ -6,7 +6,7 @@ const Booking = require('../models/Booking');
 const adminAuth = require('../middleware/adminAuth');
 const { bookingPdfBuffer } = require('../utils/pdf');
 const { sendMail } = require('../utils/mailer');
-
+const Offer = require('../models/Offer');   
 
 const router = express.Router();
 
@@ -32,6 +32,10 @@ const fmtDE = (isoDate) => {
 
 /* ------------------------------ Routes ------------------------------ */
 
+
+
+
+
 // Create (PUBLIC)
 router.post('/', async (req, res) => {
   try {
@@ -40,14 +44,77 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ ok: false, code: 'VALIDATION', errors });
     }
 
+    // OPTIONAL: look up offer for email summary (does NOT block booking if missing)
+    let offerDoc = null;
+    if (req.body.offerId) {
+      try {
+        offerDoc = await Offer.findById(String(req.body.offerId)).lean();
+        // wenn nicht gefunden: ok, wir schicken die Bestätigung trotzdem
+      } catch (_) { /* ignore invalid id */ }
+    }
+
     const created = await Booking.create({
       ...req.body,
+      // ensure we store a proper ObjectId if we found the offer
+      ...(offerDoc ? { offerId: offerDoc._id } : {}),
       status: 'pending',
       adminNote: req.body.adminNote || '',
     });
 
-    // Optional: Eingangsbestätigung (ohne PDF) – für später
-    // await sendMail({ to: created.email, subject: 'Eingangsbestätigung …', text: '…' });
+    // fire-and-forget acknowledgment email (nicht aufhalten, Fehler werden geloggt)
+    (async () => {
+      try {
+        const offerLine = offerDoc
+          ? (offerDoc.title || `${offerDoc.type ?? ''} • ${offerDoc.location ?? ''}`)
+          : 'Ohne konkretes Angebot';
+
+        const subject = 'Eingangsbestätigung – deine Buchungsanfrage';
+        const text = [
+          `Hallo ${created.firstName},`,
+          ``,
+          `vielen Dank für deine Buchungsanfrage bei der KickStart Academy.`,
+          `Wir haben deine Anfrage erhalten und melden uns zeitnah per E-Mail.`,
+          ``,
+          `Zusammenfassung:`,
+          `- Angebot: ${offerLine}`,
+          `- Datum: ${created.date}`,
+          `- Level: ${created.level}`,
+          `- Alter: ${created.age}`,
+          created.message ? `- Nachricht: ${created.message}` : '',
+          ``,
+          `Bei Rückfragen kannst du einfach auf diese E-Mail antworten.`,
+          `Sportliche Grüße`,
+          `KickStart Academy`,
+        ].filter(Boolean).join('\n');
+
+        const html = `
+          <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+            <h2 style="margin:0 0 8px">Danke für deine Buchungsanfrage, ${escapeHtml(created.firstName)}!</h2>
+            <p>Wir haben deine Anfrage erhalten und melden uns zeitnah per E-Mail.</p>
+            <h3 style="margin:16px 0 8px">Zusammenfassung</h3>
+            <ul>
+              <li><strong>Angebot:</strong> ${escapeHtml(offerLine)}</li>
+              <li><strong>Datum:</strong> ${escapeHtml(created.date)}</li>
+              <li><strong>Level:</strong> ${escapeHtml(created.level)}</li>
+              <li><strong>Alter:</strong> ${created.age}</li>
+            </ul>
+            ${created.message ? `<p><strong>Nachricht:</strong><br>${nl2br(escapeHtml(created.message))}</p>` : ''}
+            <p style="margin-top:16px">Bei Rückfragen kannst du einfach auf diese E-Mail antworten.</p>
+            <p>Sportliche Grüße<br/>KickStart Academy</p>
+          </div>
+        `.trim();
+
+        await sendMail({
+          to: created.email,
+          subject,
+          text,
+          html,
+          // BCC wird in deinem Mailer via env (MAIL_BCC) automatisch gezogen
+        });
+      } catch (mailErr) {
+        console.warn('[bookings] ack email failed:', mailErr?.message || mailErr);
+      }
+    })();
 
     return res.status(201).json({ ok: true, booking: created });
   } catch (err) {
@@ -55,6 +122,27 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
+
+
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+function nl2br(s) {
+  return String(s).replace(/\n/g, '<br>');
+}
+
+
+
+
+
 
 // List (ADMIN)
 router.get('/', adminAuth, async (req, res) => {
