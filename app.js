@@ -1,3 +1,18 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 require('dotenv').config();
 console.log('ADMIN_EMAIL loaded =', JSON.stringify(process.env.ADMIN_EMAIL));
 
@@ -8,6 +23,7 @@ const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 
 const bookingsRouter = require('./routes/bookings');
+const offersRouter   = require('./routes/offers'); // <-- NEW
 
 const app = express();
 
@@ -15,8 +31,8 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
-/** CORS – mehrere Origins erlauben (lokal + später Vercel/Domain) */
-const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+/** CORS */
+const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
@@ -31,11 +47,13 @@ app.use(cors({
 /** Rate Limiting */
 app.use('/api/', rateLimit({ windowMs: 60_000, max: 60 }));
 
-/** Healthcheck */
+/** Health */
 app.get('/api/ping', (_req, res) => res.json({ ok: true, msg: 'API up' }));
+app.get('/api/health', (_req, res) => res.json({ ok: true })); // keep both
 
 /** Routes */
-app.use('/api/bookings', bookingsRouter);
+app.use('/api/bookings', bookingsRouter); // your existing path
+app.use('/api/offers',   offersRouter);   // <-- NEW (replaces your quick hotfix)
 
 /** DB + Server */
 const PORT = process.env.PORT || 5000;
