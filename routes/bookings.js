@@ -36,6 +36,17 @@ const fmtDE = (isoDate) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 // Create (PUBLIC)
 router.post('/', async (req, res) => {
   try {
@@ -49,19 +60,44 @@ router.post('/', async (req, res) => {
     if (req.body.offerId) {
       try {
         offerDoc = await Offer.findById(String(req.body.offerId)).lean();
-        // wenn nicht gefunden: ok, wir schicken die Bestätigung trotzdem
       } catch (_) { /* ignore invalid id */ }
     }
 
+    // ⬇⬇⬇ DUPLICATE CHECK: same offer + same first/last name (case-insensitive)
+    if (offerDoc) {
+      const first = String(req.body.firstName || '').trim();
+      const last  = String(req.body.lastName  || '').trim();
+
+      if (first && last) {
+        const exists = await Booking.findOne({
+          offerId:  offerDoc._id,
+          firstName:{ $regex: `^${escapeRegex(first)}$`, $options: 'i' },
+          lastName: { $regex: `^${escapeRegex(last)}$`,  $options: 'i' },
+          status:   { $ne: 'deleted' },  // allow rebook after soft-delete
+        }).lean();
+
+        if (exists) {
+          return res.status(409).json({
+            ok: false,
+            code: 'DUPLICATE',
+            errors: {
+              firstName: 'A booking with this first/last name already exists for this offer.',
+              lastName:  'Please use different names or contact us.',
+            },
+          });
+        }
+      }
+    }
+    // ⬆⬆⬆ END DUPLICATE CHECK
+
     const created = await Booking.create({
       ...req.body,
-      // ensure we store a proper ObjectId if we found the offer
       ...(offerDoc ? { offerId: offerDoc._id } : {}),
       status: 'pending',
       adminNote: req.body.adminNote || '',
     });
 
-    // fire-and-forget acknowledgment email (nicht aufhalten, Fehler werden geloggt)
+    // fire-and-forget acknowledgment email
     (async () => {
       try {
         const offerLine = offerDoc
@@ -104,13 +140,7 @@ router.post('/', async (req, res) => {
           </div>
         `.trim();
 
-        await sendMail({
-          to: created.email,
-          subject,
-          text,
-          html,
-          // BCC wird in deinem Mailer via env (MAIL_BCC) automatisch gezogen
-        });
+        await sendMail({ to: created.email, subject, text, html });
       } catch (mailErr) {
         console.warn('[bookings] ack email failed:', mailErr?.message || mailErr);
       }
@@ -123,10 +153,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-
-
-
-
+// helpers (falls noch nicht vorhanden)
 function escapeHtml(s) {
   return String(s)
     .replaceAll('&', '&amp;')
@@ -138,6 +165,14 @@ function escapeHtml(s) {
 function nl2br(s) {
   return String(s).replace(/\n/g, '<br>');
 }
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+
+
+
+
 
 
 
@@ -157,6 +192,8 @@ router.get('/', adminAuth, async (req, res) => {
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
 
 
 
