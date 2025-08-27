@@ -52,7 +52,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true })); // keep both
 /** Routes */
 app.use('/api/bookings',    bookingsRouter);
 app.use('/api/offers',      offersRouter);
-app.use('/api/admin/users', adminUsersRouter); // <-- ADD THIS
+app.use('/api/admin/auth', adminUsersRouter); // <-- ADD THIS
 
 /** DB + Server */
 const PORT = process.env.PORT || 5000;

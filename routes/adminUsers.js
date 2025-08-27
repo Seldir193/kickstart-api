@@ -5,23 +5,31 @@ const AdminUser = require('../models/AdminUser');
 
 const router = express.Router();
 
-// POST /api/admin/users/signup
+// routes/adminUsers.js
 router.post('/signup', async (req, res) => {
   try {
     const { fullName, email, password } = req.body || {};
     const errors = {};
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
     if (!fullName?.trim()) errors.fullName = 'Required';
-    if (!/.+@.+\..+/.test(email || '')) errors.email = 'Invalid email';
+    if (!/.+@.+\..+/.test(normalizedEmail)) errors.email = 'Invalid email';
     if (!password || password.length < 6) errors.password = 'Min. 6 characters';
     if (Object.keys(errors).length) return res.status(400).json({ ok: false, errors });
 
-    const existing = await AdminUser.findOne({ email: String(email).toLowerCase() });
+    // Optional: ENV-Admin für Signup sperren, damit es nicht wie ein „Bug“ wirkt
+    const reserved = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    if (reserved && normalizedEmail === reserved) {
+      return res.status(409).json({ ok: false, errors: { email: 'This email is reserved for system admin' } });
+    }
+
+    const existing = await AdminUser.findOne({ email: normalizedEmail });
     if (existing) return res.status(409).json({ ok: false, errors: { email: 'Email already registered' } });
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12); // 12 statt 10 (ok in Dev)
     const user = await AdminUser.create({
       fullName: fullName.trim(),
-      email: String(email).toLowerCase(),
+      email: normalizedEmail,
       passwordHash,
     });
 
@@ -30,18 +38,24 @@ router.post('/signup', async (req, res) => {
       user: { id: user._id, fullName: user.fullName, email: user.email }
     });
   } catch (e) {
+    if (e?.code === 11000) {
+      return res.status(409).json({ ok: false, errors: { email: 'Email already registered' } });
+    }
+    if (e?.name === 'ValidationError') {
+      return res.status(400).json({ ok: false, error: 'Validation failed', details: e.errors });
+    }
     console.error('signup error:', e);
     return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
 
-// POST /api/admin/users/login
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing credentials' });
 
-    const user = await AdminUser.findOne({ email: String(email).toLowerCase() });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const user = await AdminUser.findOne({ email: normalizedEmail });
     if (!user) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
 
     const ok = await user.comparePassword(password);
@@ -54,7 +68,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/admin/users  (simple list)
+// GET /api/admin/auth  (simple list)
 router.get('/', async (_req, res) => {
   const users = await AdminUser
     .find()
