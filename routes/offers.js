@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 // routes/offers.js
 const express = require('express');
 const router = express.Router();
@@ -24,16 +15,40 @@ function sanitizeDays(input) {
   return out;
 }
 
+// -------- Helpers for multi-tenancy --------
+function getProviderId(req) {
+  const v = req.get('x-provider-id');
+  return v ? String(v).trim() : null;
+}
+function requireProvider(req, res) {
+  const pid = getProviderId(req);
+  if (!pid) {
+    res.status(401).json({ ok: false, error: 'Unauthorized: missing provider' });
+    return null;
+  }
+  return pid;
+}
+
 /**
  * GET /api/offers
+ * Public: returns only onlineActive=true
+ * Admin (with X-Provider-Id): returns only this provider's offers (no onlineActive filter)
  * Query: ?type=&location=&q=&page=&limit=
- * Returns only onlineActive=true
  */
 router.get('/', async (req, res) => {
   try {
     const { type, location, q, page = 1, limit = 10 } = req.query;
+    const pid = getProviderId(req);
 
-    const filter = { onlineActive: true };
+    const filter = {};
+    if (pid) {
+      // Admin / Provider-sicht
+      filter.owner = pid;
+    } else {
+      // Public-Sicht
+      filter.onlineActive = true;
+    }
+
     if (type) filter.type = String(type);
     if (location) filter.location = String(location);
 
@@ -56,6 +71,7 @@ router.get('/', async (req, res) => {
       Offer.countDocuments(filter),
     ]);
 
+    // Response-Shape beibehalten wie vorher (keine "ok"-Hülle)
     res.json({ items, total });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -64,11 +80,17 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /api/offers/:id
- * Return single offer (no onlineActive filter, so booking works even if toggled later)
+ * Public: einzelnes Offer (ohne onlineActive-Filter; Buchung bleibt möglich)
+ * Admin (mit X-Provider-Id): nur eigenes Offer abrufbar
  */
 router.get('/:id', async (req, res) => {
   try {
-    const doc = await Offer.findById(req.params.id).lean();
+    const pid = getProviderId(req);
+
+    const doc = pid
+      ? await Offer.findOne({ _id: req.params.id, owner: pid }).lean()
+      : await Offer.findById(req.params.id).lean();
+
     if (!doc) return res.status(404).json({ error: 'Offer not found' });
     res.json(doc);
   } catch (e) {
@@ -78,10 +100,14 @@ router.get('/:id', async (req, res) => {
 
 /**
  * POST /api/offers
+ * Nur Admin/Provider (X-Provider-Id erforderlich)
  * Body: { type, location, price, days, timeFrom, timeTo, ageFrom?, ageTo?, info?, onlineActive? }
  */
 router.post('/', async (req, res) => {
   try {
+    const providerId = requireProvider(req, res);
+    if (!providerId) return;
+
     const b = req.body || {};
     const errors = {};
     if (!b.type) errors.type = 'type is required';
@@ -97,6 +123,7 @@ router.post('/', async (req, res) => {
     const title = [String(b.type), String(b.location).trim()].filter(Boolean).join(' • ');
 
     const doc = await Offer.create({
+      owner: providerId, // <— erzwingen
       type: String(b.type),
       location: String(b.location).trim(),
       price: Number(b.price),
@@ -118,9 +145,13 @@ router.post('/', async (req, res) => {
 
 /**
  * PUT /api/offers/:id
+ * Nur Admin/Provider (X-Provider-Id erforderlich), abgesichert über {_id, owner}
  */
 router.put('/:id', async (req, res) => {
   try {
+    const providerId = requireProvider(req, res);
+    if (!providerId) return;
+
     const b = req.body || {};
     const errors = {};
     if (!b.type) errors.type = 'type is required';
@@ -147,7 +178,11 @@ router.put('/:id', async (req, res) => {
       title: [String(b.type), String(b.location).trim()].filter(Boolean).join(' • '),
     };
 
-    const doc = await Offer.findByIdAndUpdate(req.params.id, update, { new: true });
+    const doc = await Offer.findOneAndUpdate(
+      { _id: req.params.id, owner: providerId }, // <— owner-Scope
+      { $set: update },
+      { new: true }
+    );
     if (!doc) return res.status(404).json({ error: 'Offer not found' });
     res.json(doc);
   } catch (err) {
@@ -157,11 +192,15 @@ router.put('/:id', async (req, res) => {
 
 /**
  * DELETE /api/offers/:id
+ * Nur Admin/Provider (X-Provider-Id erforderlich), abgesichert über {_id, owner}
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const d = await Offer.findByIdAndDelete(req.params.id);
-    if (!d) return res.status(404).json({ error: 'Offer not found' });
+    const providerId = requireProvider(req, res);
+    if (!providerId) return;
+
+    const d = await Offer.deleteOne({ _id: req.params.id, owner: providerId });
+    if (!d.deletedCount) return res.status(404).json({ error: 'Offer not found' });
     res.json({ ok: true, id: req.params.id });
   } catch (err) {
     res.status(400).json({ error: 'Invalid id' });
@@ -169,11 +208,6 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
-
 
 
 
