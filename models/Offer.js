@@ -15,6 +15,10 @@ const OfferSchema = new Schema({
   info: { type: String, default: '' },
   onlineActive: { type: Boolean, default: true },
   title: { type: String, default: '' },
+
+   coachName:  { type: String, default: '' },
+  coachEmail: { type: String, default: '' },
+  coachImage: { type: String, default: '' }, 
 }, { timestamps: true });
 
 OfferSchema.pre('save', function(next) {
