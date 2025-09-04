@@ -1,0 +1,77 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" color="#111827" />
+      <mj-text font-size="14px" line-height="22px" />
+      <mj-section background-color="#ffffff" padding="0px" />
+      <mj-divider border-color="#e5e7eb" border-width="1px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f5f7fb">
+    <mj-section background-color="#ffffff" padding="20px 24px 0 24px">
+      <mj-column width="170px" vertical-align="middle">
+        <mj-image width="150px" src="{{brand.logoUrl}}" alt="{{brand.company}}" />
+      </mj-column>
+      <mj-column vertical-align="middle">
+        <mj-text font-size="22px" font-weight="700" align="center" padding="0 24px 8px">{{brand.company}}</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section background-color="#ffffff" padding="0 24px"><mj-column><mj-divider /></mj-column></mj-section>
+
+    <mj-section background-color="#ffffff" padding="12px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">Hallo {{greetingName}}.</mj-text>
+        <mj-text font-size="16px" line-height="24px" padding="4px 24px 0">{{note}}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="12px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{headline}}</mj-text>
+        <mj-text padding="6px 24px 0">
+          {{#if invoice.invoiceNo}}Rechnungsnr.: {{invoice.invoiceNo}}<br/>{{/if}}
+          {{#if invoice.invoiceDate}}Rechnungsdatum: {{invoice.invoiceDate}}<br/>{{/if}}
+          {{#if invoice.offer}}Angebot: {{invoice.offer}}<br/>{{/if}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="8px 24px 0">
+      <mj-column>
+        <mj-table>
+          <tr style="border-bottom:1px solid #e5e7eb;">
+            <th align="left" style="padding:8px;">Position</th>
+            <th align="center" style="padding:8px;">Menge</th>
+            <th align="right" style="padding:8px;">Betrag</th>
+          </tr>
+          {{#each invoice.items}}
+          <tr style="border-bottom:1px solid #f0f2f4;">
+            <td style="padding:8px;">{{this.desc}}</td>
+            <td align="center" style="padding:8px;">{{this.qty}}</td>
+            <td align="right" style="padding:8px;">{{this.amount}}</td>
+          </tr>
+          {{/each}}
+          <tr>
+            <td></td>
+            <td align="right" style="padding:8px;"><b>Gesamt:</b></td>
+            <td align="right" style="padding:8px;"><b>{{invoice.total}}</b></td>
+          </tr>
+        </mj-table>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
+          {{signature.signoff}},<br/>{{signature.name}}
+          <br/>
+          <strong>Dein Trainer-Team</strong><br/>
+        </mj-text>
+        <mj-divider />
+        <mj-text font-size="13px" color="#6b7280" line-height="20px" padding="8px 24px 24px">{{legal.line}}
+             <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
