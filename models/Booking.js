@@ -3,22 +3,22 @@ const { Schema, model, Types } = require('mongoose');
 
 const BookingSchema = new Schema(
   {
-    // MANDANT: Anbieter/Owner (AdminUser._id)
-    owner: { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true }, // <— NEU
+    // Tenant / provider (AdminUser._id)
+    owner: { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true },
 
-    // Bezug zum Angebot
+    // Offer reference
     offerId: { type: Types.ObjectId, ref: 'Offer', index: true },
 
-    // Kundendaten
+    // Customer data
     firstName: { type: String, required: true, trim: true },
     lastName:  { type: String, required: true, trim: true },
     email:     { type: String, required: true, trim: true, lowercase: true, match: /.+@.+\..+/ },
     age:       { type: Number, required: true, min: 5, max: 19 },
-    date:      { type: String, required: true }, // yyyy-mm-dd (String beibehalten)
+    date:      { type: String, required: true }, // 'yyyy-mm-dd'
     level:     { type: String, enum: ['U8','U10','U12','U14','U16','U18'], required: true },
     message:   { type: String, default: '' },
 
-    // Admin-Felder
+    // Admin fields
     status:    { type: String, enum: ['pending','confirmed','cancelled','processing','deleted'], default: 'pending', index: true },
     confirmationCode: { type: String, unique: true, sparse: true },
     confirmedAt: { type: Date },
@@ -35,12 +35,11 @@ BookingSchema.virtual('program').get(function () {
   return this.level;
 });
 
-// Indizes
-BookingSchema.index({ owner: 1, createdAt: -1 });     // <— NEU: typischer Owner-Scope
+// Indexes
+BookingSchema.index({ owner: 1, createdAt: -1 });
 BookingSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = model('Booking', BookingSchema);
-
 
 
 
