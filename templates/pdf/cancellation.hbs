@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Kündigungsbestätigung – {{brand.company}}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="./_base.css" />
+</head>
+<body>
+<main class="doc">
+
+  <div class="topband">
+    <span class="claim">{{brand.company}} • {{#if brand.website}}{{brand.website}}{{/if}}</span>
+    <span class="right">{{brand.email}}</span>
+  </div>
+
+  <section class="header">
+    <div class="brand-left">
+      {{#if brand.logoUrl}}<img class="logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
+      <div class="h1">Kündigungsbestätigung</div>
+    </div>
+    <div class="brand-right small">
+      <div>{{brand.addr1}}</div>
+      <div>{{brand.addr2}}</div>
+    </div>
+  </section>
+  <hr class="hr"/>
+
+  <div class="addr">
+{{fullName customer.parent}}
+{{#if customer.address.street}}{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}{{/if}}
+{{#if customer.address.zip}}{{customer.address.zip}}{{/if}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
+  </div>
+
+  <div class="subject">Bestätigung Ihrer Kündigung</div>
+  <div class="intro">
+    Wir bestätigen die Kündigung für <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong>
+    am Standort <strong>{{booking.venue}}</strong>.
+  </div>
+
+  <div class="facts">
+    <div class="row"><span class="k">Kundennummer:</span> <span class="v">{{customer.userId}}</span></div>
+    <div class="row"><span class="k">Erziehungsberechtigte/r:</span> <span class="v">{{fullName customer.parent}}</span></div>
+    <div class="row"><span class="k">Kind:</span> <span class="v">{{customer.child.firstName}} {{customer.child.lastName}}</span></div>
+    <div class="row"><span class="k">Kündigungsdatum:</span> <span class="v">{{fmtDate booking.cancelDate}}</span></div>
+    <div class="row"><span class="k">Angebot:</span> <span class="v">
+      {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}
+        {{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}
+      {{/if}}
+    </span></div>
+    {{#if details.reason}}
+      <div class="row"><span class="k">Grund:</span> <span class="v">{{details.reason}}</span></div>
+    {{/if}}
+  </div>
+
+  <div class="intro">
+    Vielen Dank für die gemeinsame Zeit. Bei Rückfragen helfen wir gerne weiter.
+  </div>
+
+  <div class="footer-spacer"></div>
+
+  <section class="footer">
+    <div>{{brand.company}} • {{brand.addr1}} • {{brand.addr2}}</div>
+    <div>
+      <a href="mailto:{{brand.email}}">{{brand.email}}</a>
+      {{#if brand.website}} • <a href="{{brand.website}}">{{brand.website}}</a>{{/if}}
+    </div>
+    <div class="small">IBAN: {{brand.iban}} • BIC: {{brand.bic}} • Steuer-ID: {{brand.taxId}}</div>
+  </section>
+
+</main>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
