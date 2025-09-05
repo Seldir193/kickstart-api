@@ -1,3 +1,4 @@
+
 // routes/bookings.js
 'use strict';
 
@@ -10,6 +11,9 @@ const Offer     = require('../models/Offer');
 const adminAuth = require('../middleware/adminAuth');
 
 const { bookingPdfBuffer } = require('../utils/pdf');
+
+
+
 const {
   sendMail,
   sendBookingAckEmail,
@@ -297,6 +301,15 @@ router.delete('/:id', adminAuth, async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
 /** ADMIN: Confirm + send PDF (scoped, idempotent, ?resend=1) */
 router.post('/:id/confirm', adminAuth, async (req, res) => {
   try {
@@ -328,8 +341,8 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
     }
 
     try {
-      const pdf = await bookingPdfBuffer(booking);
-      await sendBookingConfirmedEmail({ to: booking.email, booking, pdfBuffer: pdf });
+      //const pdf = await bookingPdfBuffer(booking);
+      await sendBookingConfirmedEmail({ to: booking.email, booking });
       return res.json({ ok: true, booking, mailSent: true });
     } catch (mailErr) {
       console.error('[bookings:confirm] mail/pdf failed:', mailErr?.message || mailErr);
@@ -341,7 +354,18 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
 module.exports = router;
+
+
 
 
 
