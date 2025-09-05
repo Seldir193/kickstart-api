@@ -1,25 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -28,32 +6,44 @@
       <mj-section background-color="#ffffff" padding="0px" />
       <mj-divider border-color="#e5e7eb" border-width="1px" />
     </mj-attributes>
+    <mj-style inline="inline">
+      .muted { color:#6b7280; }
+    </mj-style>
   </mj-head>
+
   <mj-body background-color="#f5f7fb">
-    <!-- Header -->
-    <mj-section background-color="#ffffff" padding="20px 24px 0 24px">
-      <mj-column width="170px" vertical-align="middle">
-        <mj-image width="150px" src="{{brand.logoUrl}}" alt="{{brand.company}}" />
+    <!-- Header: blau, mobil sauber gestapelt & zentriert -->
+    <mj-section background-color="#2563eb" padding="12px 24px">
+      <mj-column width="140px" vertical-align="middle">
+        <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0" />
       </mj-column>
       <mj-column vertical-align="middle">
-        <mj-text font-size="22px" font-weight="700" align="center" padding="0 24px 8px">{{brand.company}}</mj-text>
+        <mj-text font-size="20px" font-weight="700" align="center" padding="0" color="#ffffff">
+          {{brand.company}}
+        </mj-text>
       </mj-column>
     </mj-section>
-    <mj-section background-color="#ffffff" padding="0 24px"><mj-column><mj-divider /></mj-column></mj-section>
+
+    <!-- Divider -->
+    <mj-section background-color="#ffffff" padding="0 24px">
+      <mj-column><mj-divider /></mj-column>
+    </mj-section>
 
     <!-- Greeting -->
     <mj-section background-color="#ffffff" padding="12px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px">Hallo {{greetingName}}.</mj-text>
-        <mj-text font-size="16px" line-height="24px" padding="4px 24px 0">Vielen Dank für deine Buchung.</mj-text>
+        <mj-spacer height="10px" />
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">Vielen Dank für deine Buchung.</mj-text>
       </mj-column>
     </mj-section>
 
     <!-- Standort -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
+    <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.locationTitle}}</mj-text>
-        <mj-text padding="6px 24px 0">
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">
           {{#if location.club}}{{location.club}}<br/>{{/if}}
           {{#if location.address}}{{location.address}}{{/if}}
         </mj-text>
@@ -61,42 +51,55 @@
     </mj-section>
 
     <!-- Kontaktdaten -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
+    <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.contactTitle}}</mj-text>
-        <mj-text padding="6px 24px 0">{{#if customer.address}}{{customer.address}}{{/if}}</mj-text>
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">{{#if customer.address}}{{customer.address}}{{/if}}</mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Buchung -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
-      <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.bookingTitle}}</mj-text>
-        <mj-text padding="6px 24px 6px">
-          {{#if customer.childFull}}<b>{{customer.childFull}}</b> | {{/if}}{{booking.offer}}<br/>
-          {{#if booking.bookingDate}}<b>Start:</b> {{booking.bookingDate}}<br/>{{/if}}
-          {{#if booking.venue}}<b>Ort:</b> {{booking.venue}}{{/if}}
-        </mj-text>
-      </mj-column>
-    </mj-section>
 
-    <!-- Ansprechpartner -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
-      <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.agentTitle}}</mj-text>
-        <mj-text padding="6px 24px 0">
-          Selcuk Kocyigit<br/>
-          <a href="mailto:{{customer.email}}" style="color:#111827;text-decoration:none;">{{customer.email}}</a><br/>
-          <a href="tel:+4917643203362" style="color:#111827;text-decoration:none;">+49 176 4320 3362</a>
-        </mj-text>
-      </mj-column>
-    </mj-section>
+
+
+<!-- Buchung -->
+<mj-section background-color="#ffffff" padding="16px 0 0">
+  <mj-column>
+    <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.bookingTitle}}</mj-text>
+    <mj-spacer height="6px" />
+    <mj-text padding="0 24px 6px">
+      {{#if customer.childFull}}<b>{{customer.childFull}}</b> | {{/if}}{{booking.offer}}<br/>
+      {{#if booking.bookingDate}}<b>Start:</b> {{fmtDate booking.bookingDate}}<br/>{{/if}}
+      {{#if booking.venue}}<b>Ort:</b> {{booking.venue}}{{/if}}
+    </mj-text>
+
+    {{#if price.monthly}}
+      <mj-text font-size="16px" font-weight="700" padding="4px 24px 0">Preisübersicht</mj-text>
+
+<mj-text padding="0 24px 6px">
+  Monatlich: {{price.monthly}}<br/>
+  {{#if price.firstMonth}}Erster Monat (anteilig): {{price.firstMonth}}<br/>{{/if}}
+</mj-text>
+
+
+   
+    {{/if}}
+  </mj-column>
+</mj-section>
+
+
+
+
+
+
+
 
     <!-- Rechnung -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
+    <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.invoiceTitle}}</mj-text>
-        <mj-text padding="6px 24px 0">
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">
           {{#if invoice.invoiceNo}}Rechnungsnr.: {{invoice.invoiceNo}}<br/>{{/if}}
           {{#if invoice.invoiceDate}}Rechnungsdatum: {{invoice.invoiceDate}}<br/>{{/if}}
           {{#if invoice.monthlyAmount}}Monatlich: {{invoice.monthlyAmount}}<br/>{{/if}}
@@ -106,22 +109,71 @@
       </mj-column>
     </mj-section>
 
-    <!-- Signatur / Footer -->
-    <mj-section background-color="#ffffff" padding="16px 0 0">
+    <!-- Signatur -->
+    <mj-section background-color="#ffffff" padding="20px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
-          {{signature.signoff}},<br/>{{signature.name}}
-          <br/>
+          {{signature.signoff}},<br/>{{signature.name}}<br/>
           <strong>Dein Trainer-Team</strong><br/>
         </mj-text>
         <mj-divider />
-        <mj-text font-size="13px" color="#6b7280" line-height="20px" padding="8px 24px 24px">{{legal.line}}
-            <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
+      </mj-column>
+    </mj-section>
+
+    <!-- Social-Links nebeneinander -->
+    <mj-section background-color="#ffffff" padding="8px 0 0">
+      <mj-column>
+        <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
+          <mj-social-element name="facebook" href="https://www.facebook.com/muenchner.fussball.schule.ruhr" />
+          <mj-social-element name="instagram" href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de" />
+          <mj-social-element name="web" href="https://www.tiktok.com/@mfs_fussballtraining_nrw?" />
+          <mj-social-element name="youtube" href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer: grau, alles untereinander -->
+    <mj-section background-color="#f1f5f9" padding="0 0 16px 0">
+      <mj-column>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="12px 24px 0">
+          © 2025, {{brand.company}} – alle Rechte vorbehalten.
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          {{brand.addr1}}<br/>{{brand.addr2}}
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          Telefon: <a href="tel:+4917643203362" style="color:#0f172a; text-decoration:none;">0176 4320 3362</a>
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          E-Mail: <a href="mailto:{{brand.email}}" style="color:#0f172a; text-decoration:none;">{{brand.email}}</a>
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 8px">
+          Website: <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
         </mj-text>
       </mj-column>
     </mj-section>
   </mj-body>
 </mjml>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
