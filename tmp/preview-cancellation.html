@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Kündigungsbestätigung – </title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+/* --- A4 Seite & Typo --- */
+@page { size: A4; margin: 15mm 15mm 18mm 15mm; }
+
+html, body {
+  margin: 0; padding: 0;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px; line-height: 1.45;
+}
+
+a { color: inherit; text-decoration: none; }
+
+
+/* --- Topband (wie im Screenshot) --- */
+.topband {
+   background: #1f2937;
+  color: #fff;
+  padding: 6px 10px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+.topband .claim { opacity: .9; font-weight: 600; }
+.topband .right { float: right; opacity: .85; }
+
+/* --- Header --- */
+.header {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  margin-top: 10px;
+}
+.brand-left { display: flex; align-items: center; gap: 16px; }
+.logo { max-height: 50px; }
+.h1 { font-size: 20px; font-weight: 700; margin: 0; }
+.h2 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+
+/* Linie nur unter Header */
+.hr { border: 0; border-top: 1px solid #e5e7eb; margin: 10px 0 16px; }
+
+/* --- Adressblock / Betreff / Intro --- */
+.addr {
+  white-space: pre-line;
+  margin: 2px 0 10px;
+}
+.subject { font-size: 16px; font-weight: 700; margin: 8px 0 6px; }
+.intro { margin: 6px 0 12px; }
+
+/* --- Fakten (mono wie im Beispiel) --- */
+.facts { margin: 6px 0 10px; }
+.facts .row { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+.facts .k { display: inline-block; width: 160px; color: #6b7280; }
+.facts .v { opacity: .95; }
+
+/* --- Key-Value Grid (für größere Blöcke) --- */
+.kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; margin: 8px 0 12px; }
+.kv .k { color: #6b7280; }
+.kv .v { color: #111827; }
+
+/* --- Tabelle (Positionen) --- */
+.table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.table th, .table td { padding: 8px 10px; }
+.table thead th { border-bottom: 1px solid #e5e7eb; }
+.table tbody tr + tr td { border-top: 1px solid #f3f4f6; }
+.ta-center { text-align: center; }
+.ta-right  { text-align: right; }
+
+/* --- Summe --- */
+.totals { display: flex; justify-content: flex-end; align-items: baseline; gap: 12px; margin-top: 10px; }
+.totals .label { color: #6b7280; }
+.totals .amount { font-weight: 700; }
+
+/* --- Footer fix unten --- */
+.footer {
+  position: fixed;
+  left: 15mm; right: 15mm; bottom: 10mm;
+  border-top: 1px solid #e5e7eb; padding-top: 8px;
+  font-size: 11px; background: #fff;
+}
+/* Platzhalter, damit Inhalt nicht unter Fußzeile rutscht */
+.footer-spacer { height: 24mm; }
+
+/* Utilities */
+.m-0 { margin: 0; }
+.small { color: #6b7280; font-size: 11px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</style>
+</head>
+<body>
+<main class="doc">
+
+  <div class="topband">
+    <span class="claim"> • </span>
+    <span class="right"></span>
+  </div>
+
+  <section class="header">
+    <div class="brand-left">
+      
+      <div class="h1">Kündigungsbestätigung</div>
+    </div>
+    <div class="brand-right small">
+      <div></div>
+      <div></div>
+    </div>
+  </section>
+  <hr class="hr"/>
+
+  <div class="addr">
+Frau AASelcuk AAAKocyigit
+cedcdsc 43
+47226 Duisurg
+  </div>
+
+  <div class="subject">Bestätigung Ihrer Kündigung</div>
+  <div class="intro">
+    Wir bestätigen die Kündigung für <strong>AHMET mehm</strong>
+    am Standort <strong></strong>.
+  </div>
+
+  <div class="facts">
+    <div class="row"><span class="k">Kundennummer:</span> <span class="v">3</span></div>
+    <div class="row"><span class="k">Erziehungsberechtigte/r:</span> <span class="v">Frau AASelcuk AAAKocyigit</span></div>
+    <div class="row"><span class="k">Kind:</span> <span class="v">AHMET mehm</span></div>
+    <div class="row"><span class="k">Kündigungsdatum:</span> <span class="v"></span></div>
+    <div class="row"><span class="k">Angebot:</span> <span class="v">
+      U10    </span></div>
+  </div>
+
+  <div class="intro">
+    Vielen Dank für die gemeinsame Zeit. Bei Rückfragen helfen wir gerne weiter.
+  </div>
+
+  <div class="footer-spacer"></div>
+
+  <section class="footer">
+    <div> •  • </div>
+    <div>
+      <a href="mailto:"></a>
+      
+    </div>
+    <div class="small">IBAN:  • BIC:  • Steuer-ID: </div>
+  </section>
+
+</main>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
