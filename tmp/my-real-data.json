@@ -1,0 +1,18 @@
+{
+  "customer": {
+    "userId": "460",
+    "parent": { "salutation": "Herr", "firstName": "Giwan", "lastName": "Hesso" },
+    "child":  { "firstName": "Kalafat Yusuf", "lastName": "Erdem" },
+    "address": { "street": "Friedrich-Alfred-Straße", "houseNo": "108", "zip": "47225", "city": "Duisburg" }
+  },
+  "booking": {
+    "offerTitle": "Fördertraining",
+    "offerType": "FOET 224",
+    "venue": "SV Genc Osman Duisburg",
+    "date": "2025-05-01",
+    "status": "active",
+    "cancelDate": "2025-02-28"
+  },
+  "amount": 75,
+  "currency": "EUR"
+}
