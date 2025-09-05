@@ -1,3 +1,14 @@
+
+
+
+
+
+
+
+
+
+
+
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -6,29 +17,49 @@
       <mj-section background-color="#ffffff" padding="0px" />
       <mj-divider border-color="#e5e7eb" border-width="1px" />
     </mj-attributes>
+    <mj-style inline="inline">
+      .muted { color:#6b7280; }
+      .link { color:#0f172a; text-decoration:none; }
+    </mj-style>
   </mj-head>
+
   <mj-body background-color="#f5f7fb">
-    <mj-section background-color="#ffffff" padding="20px 24px 0 24px">
-      <mj-column width="170px" vertical-align="middle">
-        <mj-image width="150px" src="{{brand.logoUrl}}" alt="{{brand.company}}" />
-      </mj-column>
+    <!-- Header: blau, mobil sauber gestacked -->
+    <mj-section background-color="#2563eb" padding="12px 24px">
       <mj-column vertical-align="middle">
-        <mj-text font-size="22px" font-weight="700" align="center" padding="0 24px 8px">{{brand.company}}</mj-text>
-      </mj-column>
-    </mj-section>
-    <mj-section background-color="#ffffff" padding="0 24px"><mj-column><mj-divider /></mj-column></mj-section>
-
-    <mj-section background-color="#ffffff" padding="12px 0 0">
-      <mj-column>
-        <mj-text font-size="16px" line-height="24px" padding="0 24px">Hallo {{greetingName}}.</mj-text>
-        <mj-text font-size="16px" line-height="24px" padding="4px 24px 0">{{infoLine}}</mj-text>
+        <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0 0 6px 0" />
+        <mj-text font-size="20px" font-weight="700" align="center" padding="0" color="#ffffff">
+          {{brand.company}}
+        </mj-text>
       </mj-column>
     </mj-section>
 
+    <!-- Divider -->
+    <mj-section background-color="#ffffff" padding="0 24px">
+      <mj-column><mj-divider /></mj-column>
+    </mj-section>
+
+    <!-- Begrüßung + Info -->
     <mj-section background-color="#ffffff" padding="12px 0 0">
       <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">Details</mj-text>
-        <mj-text padding="6px 24px 0">
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          Hallo {{greetingName}}.
+        </mj-text>
+        <mj-spacer height="10px" />
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          {{infoLine}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Details -->
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">
+          {{headline}}
+        </mj-text>
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">
           {{#if booking.offer}}<b>Angebot:</b> {{booking.offer}}<br/>{{/if}}
           <b>Wirksam zum:</b> {{details.cancelDate}}<br/>
           {{#if details.reason}}<b>Grund:</b> {{details.reason}}{{/if}}
@@ -36,23 +67,64 @@
       </mj-column>
     </mj-section>
 
+    <!-- Optionaler Hinweisblock -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
+        <mj-text padding="0 24px" css-class="muted">
+          Hinweis: Diese Bestätigung dient nur zu deiner Information. Bei Fragen antworte einfach auf diese E-Mail.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Signatur -->
+    <mj-section background-color="#ffffff" padding="20px 0 0">
+      <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
-          {{signature.signoff}},<br/>{{signature.name}}
-          <br/>
+          {{signature.signoff}},<br/>{{signature.name}}<br/>
           <strong>Dein Trainer-Team</strong><br/>
         </mj-text>
         <mj-divider />
-        <mj-text font-size="13px" color="#6b7280" line-height="20px" padding="8px 24px 24px">{{legal.line}}
-          <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
+      </mj-column>
+    </mj-section>
+
+    <!-- Social-Links nebeneinander (ohne farbigen Hintergrund) -->
+    <mj-section background-color="#ffffff" padding="8px 0 0">
+      <mj-column>
+        <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
+          <mj-social-element name="facebook"  href="https://www.facebook.com/muenchner.fussball.schule.ruhr" background-color="transparent" />
+          <mj-social-element name="instagram" href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de" background-color="transparent" />
+          <mj-social-element name="web"       href="https://www.tiktok.com/@mfs_fussballtraining_nrw?" background-color="transparent" />
+          <mj-social-element name="youtube"   href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA" background-color="transparent" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer: grau, alles untereinander -->
+    <mj-section background-color="#f1f5f9" padding="0 0 16px 0">
+      <mj-column>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="12px 24px 0">
+          © 2025, {{brand.company}} – alle Rechte vorbehalten.
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          {{brand.addr1}}<br/>{{brand.addr2}}
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          Telefon: <a href="tel:+4917643203362" class="link">0176 4320 3362</a>
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+          E-Mail: <a href="mailto:{{brand.email}}" class="link">{{brand.email}}</a>
+        </mj-text>
+
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 8px">
+          Website: <a href="{{brand.website}}" class="link">{{brand.website}}</a>
         </mj-text>
       </mj-column>
     </mj-section>
   </mj-body>
 </mjml>
-
-
 
 
 
