@@ -1,6 +1,14 @@
 
 
+
+
+
+
+
+
 // routes/customers.js
+'use strict';
+
 const express = require('express');
 const mongoose = require('mongoose');
 const { Types } = mongoose;
@@ -8,8 +16,9 @@ const { Types } = mongoose;
 const Customer = require('../models/Customer');
 const Offer    = require('../models/Offer');
 
-
 const archiver = require('archiver');
+
+
 
 const {
   buildParticipationPdf,
@@ -26,11 +35,13 @@ const {
 const router = express.Router();
 
 /* ======= Config ======= */
+/** Welche Angebotstypen dürfen (einzelne) Buchungen gekündigt werden */
 const CANCEL_ALLOWED = new Set([
   'Kindergarten',
   'Foerdertraining',
-  'Athletiktraining',
-  'AthleticTraining',
+  'AthleticTraining',   // EN
+  'Athletiktraining',   // DE (Fallback)
+  'PersonalTraining',
 ]);
 
 /* ======= Owner helpers ======= */
@@ -256,15 +267,17 @@ router.post('/:id/cancel', async (req, res) => {
         },
       },
       { new: true }
-    );
+    ).lean();
 
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
     if (customer.parent?.email) {
-      const pdf = await buildCancellationPdf({ customer, date: cancelAt, reason });
+      const pdf = await buildCancellationPdf({ customer, booking: {}, offer: null, date: cancelAt, reason });
       await sendCancellationEmail({
         to: customer.parent.email,
         customer,
+        booking: {},
+        offer: null,
         date: cancelAt,
         reason,
         pdfBuffer: pdf,
@@ -336,7 +349,7 @@ router.post('/:id/bookings/:bid/cancel', async (req, res) => {
     const booking = customer.bookings.id(bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    const offer = await Offer.findById(booking.offerId).lean();
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
 
     if (!CANCEL_ALLOWED.has(offer.type)) {
@@ -347,14 +360,20 @@ router.post('/:id/bookings/:bid/cancel', async (req, res) => {
     booking.cancelDate = cancelAt;
     booking.cancelReason = String(reason || '');
 
+    // Snapshots auffüllen
+    booking.offerTitle = booking.offerTitle || offer.title || '';
+    booking.offerType  = booking.offerType  || offer.type  || '';
+    booking.venue      = booking.venue      || offer.location || '';
+
     await customer.save();
 
     if (customer.parent?.email) {
-      const pdf = await buildCancellationPdf({ customer, booking, date: cancelAt, reason });
+      const pdf = await buildCancellationPdf({ customer: customer.toObject?.() || customer, booking, offer, date: cancelAt, reason });
       await sendCancellationEmail({
         to: customer.parent.email,
-        customer,
+        customer: customer.toObject?.() || customer,
         booking,
+        offer,
         date: cancelAt,
         reason,
         pdfBuffer: pdf,
@@ -368,35 +387,115 @@ router.post('/:id/bookings/:bid/cancel', async (req, res) => {
   }
 });
 
-/* ======= STORNO: Email with storno PDF ======= */
-router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
+
+
+
+
+
+/* ======= DOCUMENT PDFs (used by Next proxy) ======= */
+router.post('/:id/bookings/:bid/documents/participation', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
     const id = requireId(req, res); if (!id) return;
+
     const bid = String(req.params.bid || '').trim();
     if (!mongoose.isValidObjectId(bid)) {
       return res.status(400).json({ error: 'Invalid booking id' });
     }
 
-    const { amount = 0, currency = 'EUR' } = req.body || {};
-
-    const customer = await Customer.findOne({ _id: id, owner });
+    // Customer als Plain Object (für PDF leichter)
+    const customer = await Customer.findOne({ _id: id, owner }).lean();
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    const booking = customer.bookings.id(bid);
+    const booking = (customer.bookings || []).find(b => String(b._id) === bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    if (!customer.parent?.email) {
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+
+    // Snapshots für Template (ohne DB-Write)
+    booking.offerTitle = booking.offerTitle || offer.title || '';
+    booking.offerType  = booking.offerType  || offer.type  || '';
+    booking.venue      = booking.venue      || offer.location || '';
+
+    const pdf = await buildParticipationPdf({ customer, booking, offer });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="Teilnahmebestaetigung.pdf"');
+    return res.status(200).send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+/* ======= STORNO: Email mit Storno-PDF ======= */
+router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const id = requireId(req, res); if (!id) return;
+
+    const bid = String(req.params.bid || '').trim();
+    if (!mongoose.isValidObjectId(bid)) {
+      return res.status(400).json({ error: 'Invalid booking id' });
+    }
+
+    const { currency = 'EUR' } = req.body || {};
+    const rawAmount = req.body?.amount;
+
+    // amount NUR setzen, wenn wirklich gesendet; sonst undefined => Fallback auf offer.price
+    const amountNum =
+      (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === '')
+        ? undefined
+        : (Number.isFinite(Number(rawAmount)) ? Number(rawAmount) : undefined);
+
+    const customerDoc = await Customer.findOne({ _id: id, owner });
+    if (!customerDoc) return res.status(404).json({ error: 'Customer not found' });
+
+    const booking = customerDoc.bookings.id(bid);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    if (!customerDoc.parent?.email) {
       return res.status(400).json({ error: 'Customer has no email' });
     }
 
-    const pdf = await buildStornoPdf({ customer, booking, amount: Number(amount) || 0, currency });
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+
+    // Snapshots für PDF/Mail (ohne speichern)
+    booking.offerTitle = booking.offerTitle || offer.title || '';
+    booking.offerType  = booking.offerType  || offer.type  || '';
+    booking.venue      = booking.venue      || offer.location || '';
+
+    const customer = customerDoc.toObject ? customerDoc.toObject() : customerDoc;
+
+    // --- Debug: siehst du sofort in der Konsole, was verwendet wird
+    console.log('[STORNO route]', {
+      rawAmount, amountNum, offerPrice: offer?.price, currency
+    });
+
+    const pdf = await buildStornoPdf({
+      customer,
+      booking,
+      offer,
+      amount: amountNum,          // undefined => Fallback auf offer.price
+      currency,
+    });
+
     await sendStornoEmail({
       to: customer.parent.email,
       customer,
       booking,
+      offer,
       pdfBuffer: pdf,
-      amount: Number(amount) || 0,
+      amount: amountNum,          // undefined => Fallback auch in der Mail
       currency,
     });
 
@@ -420,10 +519,7 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
 
 
 
-
-
-
-/* ======= EMAIL: participation confirmation (detaillierte Fehler) ======= */
+/* ======= EMAIL: participation confirmation (mit Angebot/Preis) ======= */
 router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -434,7 +530,7 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
       return res.status(400).json({ error: 'Invalid booking id' });
     }
 
-    // optionale Felder (falls du sie später mitschickst – stören nicht)
+    // optionale Zusatzfelder (werden an pdf.js weitergereicht)
     const {
       invoiceNo,
       monthlyAmount,
@@ -443,25 +539,36 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
       invoiceDate,
     } = req.body || {};
 
-    const customer = await Customer.findOne({ _id: id, owner });
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    const customerDoc = await Customer.findOne({ _id: id, owner });
+    if (!customerDoc) return res.status(404).json({ error: 'Customer not found' });
 
-    const booking = customer.bookings.id(bid);
+    const booking = customerDoc.bookings.id(bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    if (!customer.parent?.email) {
+    if (!customerDoc.parent?.email) {
       return res.status(400).json({ error: 'Customer has no email' });
     }
+
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+
+    // Snapshots für Template befüllen
+    booking.offerTitle = booking.offerTitle || offer.title || '';
+    booking.offerType  = booking.offerType  || offer.type  || '';
+    booking.venue      = booking.venue      || offer.location || '';
+
+    const customer = customerDoc.toObject ? customerDoc.toObject() : customerDoc;
 
     let pdf;
     try {
       pdf = await buildParticipationPdf({
         customer,
         booking,
+        offer,
         invoiceNo,
         monthlyAmount,
         firstMonthAmount,
-        venue,
+        venue: venue || offer?.location,
         invoiceDate,
       });
     } catch (e) {
@@ -474,6 +581,7 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
         to: customer.parent.email,
         customer,
         booking,
+        offer,
         pdfBuffer: pdf,
       });
     } catch (e) {
@@ -487,43 +595,6 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
     res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
   }
 });
-
-
-
-
-
-/* ======= DOCUMENT PDFs (used by Next proxy) ======= */
-router.post('/:id/bookings/:bid/documents/participation', async (req, res) => {
-  try {
-    const owner = requireOwner(req, res); if (!owner) return;
-    const id = requireId(req, res); if (!id) return;
-
-    const bid = String(req.params.bid || '').trim();
-    if (!mongoose.isValidObjectId(bid)) {
-      return res.status(400).json({ error: 'Invalid booking id' });
-    }
-
-    const customer = await Customer.findOne({ _id: id, owner }).lean();
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
-
-    const booking = (customer.bookings || []).find(b => String(b._id) === bid);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
-
-    const pdf = await buildParticipationPdf({ customer, booking });
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="Teilnahmebestaetigung.pdf"');
-    return res.status(200).send(pdf);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-
-
-
-
 
 
 
@@ -547,10 +618,12 @@ router.post('/:id/bookings/:bid/documents/cancellation', async (req, res) => {
     const booking = (customer.bookings || []).find(b => String(b._id) === bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+
     const date = booking.cancelDate || new Date();
     const reason = booking.cancelReason || '';
 
-    const pdf = await buildCancellationPdf({ customer, booking, date, reason });
+    const pdf = await buildCancellationPdf({ customer, booking, offer, date, reason });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="Kuendigungsbestaetigung.pdf"');
@@ -561,6 +634,13 @@ router.post('/:id/bookings/:bid/documents/cancellation', async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+// Storno-PDF (Einzeldokument)
 router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -571,7 +651,14 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
       return res.status(400).json({ error: 'Invalid booking id' });
     }
 
-    const { amount = 0, currency = 'EUR' } = req.body || {};
+    const { currency = 'EUR' } = req.body || {};
+    const rawAmount = req.body?.amount;
+
+    // amount nur setzen, wenn wirklich übergeben; sonst undefined => Fallback auf offer.price
+    const amountNum =
+      (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === '')
+        ? undefined
+        : (Number.isFinite(Number(rawAmount)) ? Number(rawAmount) : undefined);
 
     const customer = await Customer.findOne({ _id: id, owner }).lean();
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
@@ -579,7 +666,23 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
     const booking = (customer.bookings || []).find(b => String(b._id) === bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    const pdf = await buildStornoPdf({ customer, booking, amount: Number(amount) || 0, currency });
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+
+    // Snapshots (ohne DB-Write)
+    booking.offerTitle = booking.offerTitle || offer.title || '';
+    booking.offerType  = booking.offerType  || offer.type  || '';
+    booking.venue      = booking.venue      || offer.location || '';
+
+    console.log('[DOCS/STORNO route] rawAmount=', rawAmount, 'amountNum=', amountNum, 'offer.price=', offer?.price);
+
+    const pdf = await buildStornoPdf({
+      customer,
+      booking,
+      offer,              // WICHTIG: für Fallback auf offer.price
+      amount: amountNum,  // undefined => Fallback
+      currency,
+    });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="Storno-Rechnung.pdf"');
@@ -589,6 +692,21 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ======= STORNO: mark booking cancelled (no email) ======= */
 router.post('/:id/bookings/:bid/storno', async (req, res) => {
@@ -683,6 +801,9 @@ router.get('/:id/documents', async (req, res) => {
     const q    = String(req.query.q || '').trim();
 
     const sortStr = String(req.query.sort || 'issuedAt:desc');
+    the: {
+      // no-op label to keep diff readable
+    }
     const [sortField, sortDir] = sortStr.split(':');
     const sortKey = (sortField || 'issuedAt');
     const sortMul = (sortDir === 'asc' ? 1 : -1);
@@ -752,25 +873,29 @@ router.get('/:id/documents', async (req, res) => {
   }
 });
 
-/**
- * GET /api/customers/:id/documents.csv
- * Same filters as JSON; streams CSV.
- */
+
+
+
+
+
+
+
+
+
+
+// === CSV: alle passenden Dokumente inkl. Preis/Venue exportieren ===
 router.get('/:id/documents.csv', async (req, res) => {
   try {
-    // reuse JSON route to build & filter, but without slicing -> export all that match filters
+    // -- gleiche Filter-Inputs wie JSON --
     req.query.page = '1';
-    req.query.limit = '1000000'; // effectively all
-    // call our own function by duplicating logic (simplest for clarity)
+    req.query.limit = '1000000';
 
     const owner = requireOwner(req, res); if (!owner) return;
     const id = requireId(req, res); if (!id) return;
 
     const typeParam = String(req.query.type || '').trim();
     const typeSet = new Set(
-      typeParam
-        ? typeParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-        : []
+      typeParam ? typeParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : []
     );
     const from = parseDate(req.query.from);
     const to   = parseDate(req.query.to);
@@ -784,45 +909,79 @@ router.get('/:id/documents.csv', async (req, res) => {
     const customer = await Customer.findOne({ _id: id, owner }).lean();
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
+    // --- Offers einmalig vorladen, um Preis/Location zu haben ---
+    const offerIds = [...new Set(
+      (customer.bookings || [])
+        .map(b => String(b.offerId || ''))
+        .filter(v => v && mongoose.isValidObjectId(v))
+    )];
+
+    const offers = offerIds.length
+      ? await Offer.find({ _id: { $in: offerIds }}).select('_id title type location price').lean()
+      : [];
+    const offerById = new Map(offers.map(o => [String(o._id), o]));
+
+    // --- Docs zusammenstellen (wie JSON-Route), aber angereichert ---
     const docs = [];
     for (const b of (customer.bookings || [])) {
-      const baseTitle = `${b.offerTitle || b.offerType || 'Angebot'}`;
       const bid = String(b._id);
-      const common = { bookingId: bid, offerTitle: b.offerTitle, offerType: b.offerType, status: b.status };
+      const offer = b.offerId ? offerById.get(String(b.offerId)) : null;
 
+      // Snapshots + Venue/Price bestimmen
+      const offerTitle = b.offerTitle || offer?.title || '';
+      const offerType  = b.offerType  || offer?.type  || '';
+      const venue      = b.venue      || offer?.location || '';
+      const price      = (typeof offer?.price === 'number') ? offer.price
+                        : (typeof b.priceMonthly === 'number') ? b.priceMonthly
+                        : 0;
+      const currency   = 'EUR';
+
+      const base = {
+        bookingId: bid,
+        offerTitle, offerType, venue, price, currency,
+        status: b.status,
+      };
+
+      // participation – immer möglich
       docs.push({
         id: `${bid}:participation`,
         type: 'participation',
-        title: `Teilnahmebestätigung – ${baseTitle}`,
+        title: `Teilnahmebestätigung – ${offerTitle || offerType || 'Angebot'}`,
         issuedAt: b.date || b.createdAt,
         href: `/api/admin/customers/${customer._id}/bookings/${bid}/documents/participation`,
-        ...common,
+        ...base,
       });
+
       if (b.status === 'cancelled') {
         const issued = b.cancelDate || b.updatedAt || b.createdAt;
+
         docs.push({
           id: `${bid}:cancellation`,
           type: 'cancellation',
-          title: `Kündigungsbestätigung – ${baseTitle}`,
+          title: `Kündigungsbestätigung – ${offerTitle || offerType || 'Angebot'}`,
           issuedAt: issued,
           href: `/api/admin/customers/${customer._id}/bookings/${bid}/documents/cancellation`,
-          ...common,
+          ...base,
         });
+
+        // Storno: in CSV geben wir hier den (Basis-)Betrag aus (Offer-Preis oder 0)
         docs.push({
           id: `${bid}:storno`,
           type: 'storno',
-          title: `Storno-Rechnung – ${baseTitle}`,
+          title: `Storno-Rechnung – ${offerTitle || offerType || 'Angebot'}`,
           issuedAt: issued,
           href: `/api/admin/customers/${customer._id}/bookings/${bid}/documents/storno`,
-          ...common,
+          ...base,
         });
       }
     }
 
+    // Filter anwenden
     let filtered = docs.filter(d => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
     if (from) filtered = filtered.filter(d => new Date(d.issuedAt) >= from);
     if (to)   filtered = filtered.filter(d => new Date(d.issuedAt) <= to);
 
+    // Sortieren
     filtered.sort((a, b) => {
       const av = new Date(a[sortKey] || 0).getTime();
       const bv = new Date(b[sortKey] || 0).getTime();
@@ -830,6 +989,7 @@ router.get('/:id/documents.csv', async (req, res) => {
       return (av < bv ? -1 : 1) * sortMul;
     });
 
+    // --- CSV streamen ---
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="customer-${id}-documents.csv"`);
 
@@ -840,18 +1000,41 @@ router.get('/:id/documents.csv', async (req, res) => {
       return s;
     };
 
-    const headers = ['id','bookingId','type','title','issuedAt','status','offerTitle','offerType','href'];
+    
+function fmtDEDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
+
+    // NEU: venue, price, currency in den Header aufnehmen
+    const headers = [
+      'id','bookingId','type','title','issuedAt','status',
+      'offerTitle','offerType','venue','price','currency','href'
+    ];
     res.write(headers.join(',') + '\n');
+
     for (const d of filtered) {
       const row = [
         d.id,
         d.bookingId,
         d.type,
         d.title,
-        d.issuedAt ? new Date(d.issuedAt).toISOString() : '',
+        
+        fmtDEDate(d.issuedAt),
         d.status || '',
         d.offerTitle || '',
         d.offerType || '',
+        d.venue || '',
+        (typeof d.price === 'number' ? d.price : ''), // roh als Zahl (Excel formatiert)
+        d.currency || 'EUR',
         d.href || '',
       ].map(esc).join(',');
       res.write(row + '\n');
@@ -870,20 +1053,61 @@ router.get('/:id/documents.csv', async (req, res) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Hilfsfunktion: einfache Worker-Queue ohne externe Lib
+async function runWithConcurrency(items, limit, worker) {
+  let idx = 0;
+  const runners = Array.from({ length: Math.max(1, limit) }, async () => {
+    while (true) {
+      const my = idx++;
+      if (my >= items.length) break;
+      await worker(items[my], my);
+    }
+  });
+  await Promise.all(runners);
+}
+
 /**
  * GET /api/customers/:id/documents.zip
- * Gleiche Filter wie JSON/CSV; erzeugt ein ZIP mit PDFs (participation, cancellation, storno).
+ * Gleiche Filter wie JSON/CSV; erzeugt ein ZIP mit PDFs.
  */
 router.get('/:id/documents.zip', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
     const id = requireId(req, res); if (!id) return;
 
-    // Filter übernehmen wie bei /documents
+    // Filter übernehmen wie /documents
     const typeParam = String(req.query.type || '').trim();
-    const typeSet = new Set(
-      typeParam ? typeParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : []
-    );
+    const typeSet = new Set(typeParam ? typeParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : []);
     const from = parseDate(req.query.from);
     const to   = parseDate(req.query.to);
     const q    = String(req.query.q || '').trim();
@@ -930,7 +1154,7 @@ router.get('/:id/documents.zip', async (req, res) => {
       }
     }
 
-    // Filter anwenden
+    // Filter
     docs = docs.filter(d => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
     if (from) docs = docs.filter(d => new Date(d.issuedAt) >= from);
     if (to)   docs = docs.filter(d => new Date(d.issuedAt) <= to);
@@ -943,41 +1167,60 @@ router.get('/:id/documents.zip', async (req, res) => {
       return (av < bv ? -1 : 1) * sortMul;
     });
 
-    // ZIP-Stream
+    // Antwort-Header
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="customer-${id}-documents.zip"`);
-
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    // optional: schneller, dafür etwas größere ZIPs
+    const archive = archiver('zip', { zlib: { level: 3 } }); // 0..9 (0 am schnellsten, 9 am kleinsten)
     archive.on('error', (err) => {
       console.error(err);
       try { res.status(500).end(); } catch {}
     });
     archive.pipe(res);
 
-    // PDFs erzeugen und hinzufügen
     const safe = (s) => String(s || '').replace(/[^\w.\- äöüÄÖÜß]/g, '_').slice(0, 120);
 
-    for (const d of docs) {
+    // Worker: PDF bauen & direkt anhängen
+    async function processDoc(d) {
       const booking = (customer.bookings || []).find(b => String(b._id) === d.bookingId);
-      if (!booking) continue;
+      if (!booking) return;
+
+      // Angebot nachladen (für Titel/Ort/Preis – auch für Storno-Betrag)
+      let offer = null;
+      if (booking.offerId) {
+        try { offer = await Offer.findById(booking.offerId).lean(); } catch {}
+      }
+
+      // Snapshots (ohne DB-Write)
+      const snap = { ...booking };
+      if (offer) {
+        snap.offerTitle = snap.offerTitle || offer.title || '';
+        snap.offerType  = snap.offerType  || offer.type  || '';
+        snap.venue      = snap.venue      || offer.location || '';
+      }
 
       let buf;
       if (d.type === 'participation') {
-        buf = await buildParticipationPdf({ customer, booking });
+        buf = await buildParticipationPdf({ customer, booking: snap, offer });
       } else if (d.type === 'cancellation') {
-        const date = booking.cancelDate || new Date();
-        const reason = booking.cancelReason || '';
-        buf = await buildCancellationPdf({ customer, booking, date, reason });
+        const date = snap.cancelDate || new Date();
+        const reason = snap.cancelReason || '';
+        buf = await buildCancellationPdf({ customer, booking: snap, offer, date, reason });
       } else if (d.type === 'storno') {
-        buf = await buildStornoPdf({ customer, booking, amount: 0, currency: 'EUR' });
+        // Betrag: wenn nichts angegeben, auf offer.price zurückfallen
+        const amount = (offer && typeof offer.price === 'number') ? offer.price : 0;
+        buf = await buildStornoPdf({ customer, booking: snap, offer, amount, currency: 'EUR' });
       } else {
-        continue;
+        return;
       }
 
       const dateStr = d.issuedAt ? new Date(d.issuedAt).toISOString().slice(0,10) : 'undated';
       const name = `${dateStr} - ${safe(d.title)}.pdf`;
       archive.append(buf, { name });
     }
+
+    // Bis zu 3 PDFs parallel bauen → viel schneller, aber speicherschonend
+    await runWithConcurrency(docs, 3, processDoc);
 
     await archive.finalize();
   } catch (err) {
@@ -990,38 +1233,7 @@ router.get('/:id/documents.zip', async (req, res) => {
 
 
 
-
-
 module.exports = router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
