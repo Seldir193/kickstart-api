@@ -13,6 +13,24 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { Types } = mongoose;
 
+
+
+const { assignInvoiceData } = require('../utils/billing');
+const {
+  nextSequence,
+  yearFrom,
+  typeCodeFromOfferType,
+  formatNumber,
+  formatInvoiceShort,
+  formatCancellationNo,
+  formatStornoNo,
+
+  
+} = require('../utils/sequences');
+
+const { normalizeInvoiceNo } = require('../utils/pdfData');
+
+
 const Customer = require('../models/Customer');
 const Offer    = require('../models/Offer');
 
@@ -248,31 +266,42 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-/* ======= CUSTOMER CANCEL (entire customer) + email ======= */
-router.post('/:id/cancel', async (req, res) => {
-  try {
-    const owner = requireOwner(req, res); if (!owner) return;
-    const id = requireId(req, res); if (!id) return;
 
-    const { date, reason } = req.body || {};
-    const cancelAt = date ? new Date(date) : new Date();
 
-    const customer = await Customer.findOneAndUpdate(
-      { _id: id, owner },
-      {
-        $set: {
-          canceledAt: new Date(),
-          cancellationDate: cancelAt,
-          cancellationReason: String(reason || ''),
-        },
-      },
-      { new: true }
-    ).lean();
 
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    if (customer.parent?.email) {
-      const pdf = await buildCancellationPdf({ customer, booking: {}, offer: null, date: cancelAt, reason });
+
+ router.post('/:id/cancel', async (req, res) => {
+   try {
+     const owner = requireOwner(req, res); if (!owner) return;
+     const id = requireId(req, res); if (!id) return;
+
+     const { date, reason } = req.body || {};
+     const cancelAt = date ? new Date(date) : new Date();
+
+     const customer = await Customer.findOneAndUpdate(
+       { _id: id, owner },
+       {
+         $set: {
+           canceledAt: new Date(),
+           cancellationDate: cancelAt,
+           cancellationReason: String(reason || ''),
+           cancellationNo: formatCancellationNo(),
+         },
+       },
+       { new: true }
+     ).lean();
+
+     if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+      const pdf = await buildCancellationPdf({
+        customer,
+        booking: {},   // keine einzelne Buchung
+        offer: null,
+        date: cancelAt,
+        reason,
+        cancellationNo: customer.cancellationNo, // im PDF anzeigen
+      });
       await sendCancellationEmail({
         to: customer.parent.email,
         customer,
@@ -282,16 +311,27 @@ router.post('/:id/cancel', async (req, res) => {
         reason,
         pdfBuffer: pdf,
       });
-    }
+    
 
-    res.json({ ok: true, customer });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+     res.json({ ok: true, customer });
+   } catch (err) {
+     console.error(err);
+     res.status(500).json({ error: 'Server error' });
+   }
 
-/* ======= BOOKING ADD ======= */
+ });
+
+
+
+
+
+
+
+
+
+
+
+// POST /:id/bookings
 router.post('/:id/bookings', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -302,90 +342,57 @@ router.post('/:id/bookings', async (req, res) => {
       return res.status(400).json({ error: 'Invalid offerId' });
     }
 
-    const offer = await Offer.findById(offerId).lean();
+    // WICHTIG: Offer owner-scoped laden (Sicherheit + Konsistenz)
+    const offer = await Offer.findOne({ _id: offerId, owner }).lean();
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
-
-    const booking = {
-      _id: new Types.ObjectId(),
-      offerId: offer._id,
-      offerTitle: offer.title,
-      offerType: offer.type || '',
-      date: date ? new Date(date) : new Date(),
-      status: 'active',
-      createdAt: new Date(),
-    };
-
-    const doc = await Customer.findOneAndUpdate(
-      { _id: id, owner },
-      { $push: { bookings: booking } },
-      { new: true }
-    );
-
-    if (!doc) return res.status(404).json({ error: 'Customer not found' });
-    res.status(201).json({ ok: true, booking });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* ======= BOOKING CANCEL (single booking) + email (cancellation PDF) ======= */
-router.post('/:id/bookings/:bid/cancel', async (req, res) => {
-  try {
-    const owner = requireOwner(req, res); if (!owner) return;
-    const id = requireId(req, res); if (!id) return;
-
-    const bid = String(req.params.bid || '').trim();
-    if (!mongoose.isValidObjectId(bid)) {
-      return res.status(400).json({ error: 'Invalid booking id' });
-    }
-
-    const { date, reason } = req.body || {};
-    const cancelAt = date ? new Date(date) : new Date();
 
     const customer = await Customer.findOne({ _id: id, owner });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    const booking = customer.bookings.id(bid);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    const bookingId = new Types.ObjectId();
+    customer.bookings.push({
+      _id: bookingId,
+      offerId: offer._id,
+      offerTitle: offer.title,
+      offerType: offer.type || '',
+      venue: offer.location || '',
+      date: date ? new Date(date) : new Date(),
+      status: 'active',
+      createdAt: new Date(),
+      priceAtBooking: typeof offer.price === 'number' ? offer.price : undefined,
+    });
 
-    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
-    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    // Subdoc-Referenz
+    const bookingSubdoc = customer.bookings.id(bookingId);
 
-    if (!CANCEL_ALLOWED.has(offer.type)) {
-      return res.status(400).json({ error: 'This offer type cannot be cancelled' });
-    }
+    // Falls assignInvoiceData NOCH NICHT speichert: erst Felder setzen ...
+    await assignInvoiceData({ booking: bookingSubdoc, offer, providerId: String(owner) });
 
-    booking.status = 'cancelled';
-    booking.cancelDate = cancelAt;
-    booking.cancelReason = String(reason || '');
-
-    // Snapshots auffüllen
-    booking.offerTitle = booking.offerTitle || offer.title || '';
-    booking.offerType  = booking.offerType  || offer.type  || '';
-    booking.venue      = booking.venue      || offer.location || '';
-
+    // ... und dann IMMER speichern (Race-Condition vermeiden)
     await customer.save();
 
-    if (customer.parent?.email) {
-      const pdf = await buildCancellationPdf({ customer: customer.toObject?.() || customer, booking, offer, date: cancelAt, reason });
-      await sendCancellationEmail({
-        to: customer.parent.email,
-        customer: customer.toObject?.() || customer,
-        booking,
-        offer,
-        date: cancelAt,
-        reason,
-        pdfBuffer: pdf,
-      });
-    }
-
-    res.json({ ok: true, booking });
+    // Frisch aus dem Doc nehmen (mit _id als String)
+    return res.status(201).json({ ok: true, booking: bookingSubdoc.toObject() });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -436,6 +443,13 @@ router.post('/:id/bookings/:bid/documents/participation', async (req, res) => {
 
 
 
+
+
+
+
+
+
+
 /* ======= STORNO: Email mit Storno-PDF ======= */
 router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
   try {
@@ -447,21 +461,17 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
       return res.status(400).json({ error: 'Invalid booking id' });
     }
 
-    const { currency = 'EUR' } = req.body || {};
-    const rawAmount = req.body?.amount;
-
-    // amount NUR setzen, wenn wirklich gesendet; sonst undefined => Fallback auf offer.price
+    const { currency = 'EUR', amount: rawAmount, refInvoiceNo, refInvoiceDate } = req.body || {};
     const amountNum =
       (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === '')
         ? undefined
         : (Number.isFinite(Number(rawAmount)) ? Number(rawAmount) : undefined);
 
-    const customerDoc = await Customer.findOne({ _id: id, owner });
+    const customerDoc = await Customer.findOne({ _id: id, owner }).exec();
     if (!customerDoc) return res.status(404).json({ error: 'Customer not found' });
 
     const booking = customerDoc.bookings.id(bid);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
-
     if (!customerDoc.parent?.email) {
       return res.status(400).json({ error: 'Customer has no email' });
     }
@@ -469,24 +479,51 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
     const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
 
-    // Snapshots für PDF/Mail (ohne speichern)
+    // Snapshots
     booking.offerTitle = booking.offerTitle || offer.title || '';
     booking.offerType  = booking.offerType  || offer.type  || '';
     booking.venue      = booking.venue      || offer.location || '';
 
-    const customer = customerDoc.toObject ? customerDoc.toObject() : customerDoc;
+    // Storno-Nr. einmalig
+    if (!booking.stornoNo) {
+      booking.stornoNo = formatStornoNo();
+      await customerDoc.save();
+    }
 
-    // --- Debug: siehst du sofort in der Konsole, was verwendet wird
-    console.log('[STORNO route]', {
-      rawAmount, amountNum, offerPrice: offer?.price, currency
+    // Referenzrechnung: Client > Booking
+    const effectiveRefNo   = (refInvoiceNo && String(refInvoiceNo).trim())
+                          || booking.invoiceNumber
+                          || booking.invoiceNo
+                          || '';
+    const effectiveRefDate = refInvoiceDate || booking.invoiceDate || null;
+
+    console.log('[STORNO route] ref-check', {
+      bid,
+      effectiveRefNo,
+      effectiveRefDate,
+      storedInvoiceNumber: booking.invoiceNumber,
+      storedInvoiceNo: booking.invoiceNo,
+      storedInvoiceDate: booking.invoiceDate,
     });
+
+    if (!effectiveRefNo) {
+      return res.status(422).json({
+        error: 'MISSING_INVOICE',
+        message: 'Für diese Stornorechnung fehlt die Referenz auf die Originalrechnung. Bitte zuerst die Teilnahme/Rechnung senden oder refInvoiceNo/refInvoiceDate mitgeben.',
+      });
+    }
+
+    const customer = customerDoc.toObject ? customerDoc.toObject() : customerDoc;
 
     const pdf = await buildStornoPdf({
       customer,
       booking,
       offer,
-      amount: amountNum,          // undefined => Fallback auf offer.price
+      amount: amountNum,
       currency,
+      stornoNo: booking.stornoNo,
+      refInvoiceNo:   effectiveRefNo,
+      refInvoiceDate: effectiveRefDate,
     });
 
     await sendStornoEmail({
@@ -495,8 +532,11 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
       booking,
       offer,
       pdfBuffer: pdf,
-      amount: amountNum,          // undefined => Fallback auch in der Mail
+      amount: amountNum,
       currency,
+      stornoNo: booking.stornoNo,
+      refInvoiceNo:   effectiveRefNo,
+      refInvoiceDate: effectiveRefDate,
     });
 
     res.json({ ok: true });
@@ -519,7 +559,7 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
 
 
 
-/* ======= EMAIL: participation confirmation (mit Angebot/Preis) ======= */
+
 router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -530,7 +570,6 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
       return res.status(400).json({ error: 'Invalid booking id' });
     }
 
-    // optionale Zusatzfelder (werden an pdf.js weitergereicht)
     const {
       invoiceNo,
       monthlyAmount,
@@ -539,10 +578,18 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
       invoiceDate,
     } = req.body || {};
 
-    const customerDoc = await Customer.findOne({ _id: id, owner });
+    // 1) Kunde laden (nicht lean!)
+    let customerDoc = await Customer.findOne({ _id: id, owner }).exec();
     if (!customerDoc) return res.status(404).json({ error: 'Customer not found' });
 
-    const booking = customerDoc.bookings.id(bid);
+    // 2) Buchung sicher finden
+    let booking = customerDoc.bookings.id(bid)
+              || customerDoc.bookings.find(b => String(b?._id) === bid);
+    if (!booking) {
+      customerDoc = await Customer.findOne({ _id: id, owner }).exec();
+      booking = customerDoc?.bookings?.id(bid)
+             || customerDoc?.bookings?.find(b => String(b?._id) === bid);
+    }
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
     if (!customerDoc.parent?.email) {
@@ -552,30 +599,85 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
     const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
 
-    // Snapshots für Template befüllen
+    // 3) Snapshots (ohne DB-Write)
     booking.offerTitle = booking.offerTitle || offer.title || '';
     booking.offerType  = booking.offerType  || offer.type  || '';
     booking.venue      = booking.venue      || offer.location || '';
 
+    // 3b) Preise aus dem Dialog als Snapshot persistieren
+    let needsSave = false;
+    const mAmt = (monthlyAmount ?? '') === '' ? undefined : Number(monthlyAmount);
+    const fAmt = (firstMonthAmount ?? '') === '' ? undefined : Number(firstMonthAmount);
+
+    if (Number.isFinite(mAmt)) { booking.monthlyAmount = mAmt; needsSave = true; }
+    if (Number.isFinite(fAmt)) { booking.firstMonthAmount = fAmt; needsSave = true; }
+
+    // Fallback Monatsbeitrag, falls nichts kam
+    if (booking.monthlyAmount == null && typeof offer.price === 'number') {
+      booking.monthlyAmount = offer.price;
+      needsSave = true;
+    }
+
+    // 4) Rechnungsnummer persistieren ODER einmalig generieren
+    if (typeof invoiceNo === 'string' && invoiceNo.trim()) {
+      // A) Nummer kommt vom Client → einmalig speichern, falls noch leer
+      if (!booking.invoiceNumber && !booking.invoiceNo) {
+        booking.invoiceNumber = invoiceNo.trim();
+        booking.invoiceDate   = invoiceDate ? new Date(invoiceDate) : new Date();
+        // Fixiere den Preis zum Zeitpunkt der Rechnungsstellung
+        if (booking.priceAtBooking == null && typeof offer.price === 'number') {
+          booking.priceAtBooking = offer.price;
+        }
+        needsSave = true;
+        console.log('[CONFIRMATION] saved provided invoiceNo:', booking.invoiceNumber, booking.invoiceDate);
+      }
+    } else if (!booking.invoiceNumber && !booking.invoiceNo) {
+      // B) Keine Nummer mitgegeben → generieren
+      const code = (offer.code || typeCodeFromOfferType(offer.type || '') || 'INV').toUpperCase();
+      const seq  = await nextSequence(`invoice:${code}:${yearFrom()}`);
+      booking.invoiceNumber = formatInvoiceShort(code, seq, new Date()); // z. B. "AT-25-0013"
+      booking.invoiceDate   = new Date();
+      if (booking.priceAtBooking == null && typeof offer.price === 'number') {
+        booking.priceAtBooking = offer.price;
+      }
+      needsSave = true;
+      console.log('[CONFIRMATION] generated invoiceNo:', booking.invoiceNumber, booking.invoiceDate);
+    }
+
+    // Änderungen speichern (genau ein Save)
+    if (needsSave) {
+      customerDoc.markModified('bookings');
+      await customerDoc.save();
+    }
+
+    // 5) Effektive Werte für PDF/Email
+    const effectiveInvoiceNo =
+      (typeof invoiceNo === 'string' && invoiceNo.trim())
+      || booking.invoiceNumber || booking.invoiceNo || '';
+
+    const effectiveInvoiceDate = invoiceDate || booking.invoiceDate || undefined;
+
     const customer = customerDoc.toObject ? customerDoc.toObject() : customerDoc;
 
+    // 6) PDF bauen (verwende die persistierten Beträge)
     let pdf;
     try {
       pdf = await buildParticipationPdf({
         customer,
         booking,
         offer,
-        invoiceNo,
-        monthlyAmount,
-        firstMonthAmount,
-        venue: venue || offer?.location,
-        invoiceDate,
+        invoiceNo:        effectiveInvoiceNo,
+        invoiceDate:      effectiveInvoiceDate,
+        venue:            venue || offer?.location,
+        monthlyAmount:    booking.monthlyAmount,
+        firstMonthAmount: booking.firstMonthAmount,
       });
     } catch (e) {
       console.error('buildParticipationPdf failed:', e);
       return res.status(500).json({ error: 'PDF_BUILD_FAILED', detail: String(e?.message || e) });
     }
 
+    // 7) E-Mail raus
     try {
       await sendParticipationEmail({
         to: customer.parent.email,
@@ -583,18 +685,21 @@ router.post('/:id/bookings/:bid/email/confirmation', async (req, res) => {
         booking,
         offer,
         pdfBuffer: pdf,
+        monthlyAmount,       // aus req.body
+  firstMonthAmount, 
       });
     } catch (e) {
       console.error('sendParticipationEmail failed:', e);
       return res.status(502).json({ error: 'MAIL_SEND_FAILED', detail: String(e?.message || e) });
     }
 
-    res.json({ ok: true });
+    return res.json({ ok: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
+    return res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
   }
 });
+
 
 
 
@@ -623,7 +728,32 @@ router.post('/:id/bookings/:bid/documents/cancellation', async (req, res) => {
     const date = booking.cancelDate || new Date();
     const reason = booking.cancelReason || '';
 
-    const pdf = await buildCancellationPdf({ customer, booking, offer, date, reason });
+  
+    if (!booking.invoiceNumber && !booking.invoiceNo) {
+  const code = (offer?.code || typeCodeFromOfferType(offer?.type || '') || 'INV').toUpperCase();
+  const seq  = await nextSequence(`invoice:${code}:${yearFrom(booking.date || new Date())}`);
+  booking.invoiceNumber = formatInvoiceShort(code, seq, booking.date || new Date());
+  booking.invoiceDate   = booking.date || new Date();
+  console.log('[DOCS/CANCELLATION] fallback invoice set (not saved):', booking.invoiceNumber, booking.invoiceDate);
+}
+
+    const referenceInvoice = {
+  number: booking.invoiceNumber || booking.invoiceNo || '',
+  date:   booking.invoiceDate || null,
+};
+
+    const pdf = await buildCancellationPdf({
+      customer,
+      booking,
+      offer,
+      date,
+      reason,
+      cancellationNo: booking.cancellationNo || undefined,
+      
+
+      refInvoiceNo: referenceInvoice.number,
+  refInvoiceDate: referenceInvoice.date,
+    });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="Kuendigungsbestaetigung.pdf"');
@@ -635,12 +765,6 @@ router.post('/:id/bookings/:bid/documents/cancellation', async (req, res) => {
 });
 
 
-
-
-
-
-
-// Storno-PDF (Einzeldokument)
 router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -653,8 +777,6 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
 
     const { currency = 'EUR' } = req.body || {};
     const rawAmount = req.body?.amount;
-
-    // amount nur setzen, wenn wirklich übergeben; sonst undefined => Fallback auf offer.price
     const amountNum =
       (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === '')
         ? undefined
@@ -669,19 +791,33 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
     const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
 
-    // Snapshots (ohne DB-Write)
-    booking.offerTitle = booking.offerTitle || offer.title || '';
-    booking.offerType  = booking.offerType  || offer.type  || '';
-    booking.venue      = booking.venue      || offer.location || '';
 
-    console.log('[DOCS/STORNO route] rawAmount=', rawAmount, 'amountNum=', amountNum, 'offer.price=', offer?.price);
+
+    if (!booking.invoiceNumber && !booking.invoiceNo) {
+  const code = (offer.code || typeCodeFromOfferType(offer.type || '') || 'INV').toUpperCase();
+  const seq  = await nextSequence(`invoice:${code}:${yearFrom(booking.date || new Date())}`);
+  booking.invoiceNumber = formatInvoiceShort(code, seq, booking.date || new Date());
+  booking.invoiceDate   = booking.date || new Date();
+  // Achtung: hier ist "customer" lean → hier NICHT save(), nur für Anzeige reicht's
+  console.log('[DOCS/STORNO] fallback invoice set (not saved):', booking.invoiceNumber, booking.invoiceDate);
+}
+
+   const referenceInvoice = {
+  number: booking.invoiceNumber || booking.invoiceNo || '',
+  date:   booking.invoiceDate || null,
+};
 
     const pdf = await buildStornoPdf({
       customer,
       booking,
-      offer,              // WICHTIG: für Fallback auf offer.price
-      amount: amountNum,  // undefined => Fallback
+      offer,
+      amount: amountNum,
       currency,
+      stornoNo: booking.stornoNo || undefined,
+   
+
+       refInvoiceNo: referenceInvoice.number,
+  refInvoiceDate: referenceInvoice.date,
     });
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -692,11 +828,6 @@ router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-
-
-
-
-
 
 
 
@@ -743,6 +874,123 @@ router.post('/:id/bookings/:bid/storno', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ router.post('/:id/bookings/:bid/cancel', async (req, res) => {
+   try {
+     const owner = requireOwner(req, res); if (!owner) return;
+     const id = requireId(req, res); if (!id) return;
+     const bid = String(req.params.bid || '').trim();
+     if (!mongoose.isValidObjectId(bid)) {
+       return res.status(400).json({ error: 'Invalid booking id' });
+     }
+
+     const { date, reason } = req.body || {};
+     const cancelAt = date ? new Date(date) : new Date();
+
+     const customer = await Customer.findOne({ _id: id, owner });
+     if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+     const booking = customer.bookings.id(bid);
+     if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+     const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+     if (!offer) return res.status(404).json({ error: 'Offer not found' });
+
+     if (!CANCEL_ALLOWED.has(offer.type)) {
+       return res.status(400).json({ error: 'This offer type cannot be cancelled' });
+     }
+
+     booking.status = 'cancelled';
+     booking.cancelDate = cancelAt;
+     booking.cancelReason = String(reason || '');
+    // kurze Kündigungsnummer setzen (einmalig)
+    if (!booking.cancellationNo) {
+      booking.cancellationNo = formatCancellationNo(); // z.B. KND-925B67
+    }
+
+
+    if (!booking.invoiceNumber && !booking.invoiceNo) {
+  const code = (offer.code || typeCodeFromOfferType(offer.type || '') || 'INV').toUpperCase();
+  const seq  = await nextSequence(`invoice:${code}:${yearFrom(booking.date || new Date())}`);
+  booking.invoiceNumber = formatInvoiceShort(code, seq, booking.date || new Date());
+  booking.invoiceDate   = booking.date || new Date();
+  await customer.save();
+  console.log('[CANCEL route] fallback invoice set:', booking.invoiceNumber, booking.invoiceDate);
+}
+
+     // Snapshots auffüllen
+     booking.offerTitle = booking.offerTitle || offer.title || '';
+     booking.offerType  = booking.offerType  || offer.type  || '';
+     booking.venue      = booking.venue      || offer.location || '';
+
+     await customer.save();
+
+     if (customer.parent?.email) {
+
+    
+
+      const referenceInvoice = {
+  number: booking.invoiceNumber || booking.invoiceNo || '',
+  date:   booking.invoiceDate || null,
+};
+
+
+      const pdf = await buildCancellationPdf({
+        customer: customer.toObject?.() || customer,
+        booking,
+        offer,
+        date: cancelAt,
+        reason,
+        cancellationNo: booking.cancellationNo, // im PDF anzeigen
+        referenceInvoice,                        // „zur Rechnung: <nr> vom <datum>“
+
+         refInvoiceNo: referenceInvoice.number,
+  refInvoiceDate: referenceInvoice.date,
+      });
+       await sendCancellationEmail({
+         to: customer.parent.email,
+         customer: customer.toObject?.() || customer,
+         booking,
+         offer,
+         date: cancelAt,
+         reason,
+        pdfBuffer: pdf,
+       // cancellationNo: booking.cancellationNo, // falls die Mail-Template es direkt nutzt
+        
+
+        refInvoiceNo: referenceInvoice.number,
+  refInvoiceDate: referenceInvoice.date,
+       });
+     }
+
+     res.json({ ok: true, booking });
+   } catch (err) {
+     console.error(err);
+     res.status(500).json({ error: 'Server error' });
+   }
+ });
+
+
+
+
+
+
+
 
 /* ===================================================================== */
 /* ======================= DOCUMENTS: PAGINATION ======================== */
@@ -879,14 +1127,10 @@ router.get('/:id/documents', async (req, res) => {
 
 
 
-
-
-
-
-// === CSV: alle passenden Dokumente inkl. Preis/Venue exportieren ===
+// === CSV: alle passenden Dokumente inkl. Preis/Venue + Nummern/Referenzen exportieren ===
 router.get('/:id/documents.csv', async (req, res) => {
   try {
-    // -- gleiche Filter-Inputs wie JSON --
+    // gleiche Filter-Inputs wie JSON
     req.query.page = '1';
     req.query.limit = '1000000';
 
@@ -909,7 +1153,7 @@ router.get('/:id/documents.csv', async (req, res) => {
     const customer = await Customer.findOne({ _id: id, owner }).lean();
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    // --- Offers einmalig vorladen, um Preis/Location zu haben ---
+    // Offers einmalig vorladen
     const offerIds = [...new Set(
       (customer.bookings || [])
         .map(b => String(b.offerId || ''))
@@ -921,13 +1165,12 @@ router.get('/:id/documents.csv', async (req, res) => {
       : [];
     const offerById = new Map(offers.map(o => [String(o._id), o]));
 
-    // --- Docs zusammenstellen (wie JSON-Route), aber angereichert ---
+    // Docs zusammenstellen (wie JSON-Route), angereichert
     const docs = [];
     for (const b of (customer.bookings || [])) {
       const bid = String(b._id);
       const offer = b.offerId ? offerById.get(String(b.offerId)) : null;
 
-      // Snapshots + Venue/Price bestimmen
       const offerTitle = b.offerTitle || offer?.title || '';
       const offerType  = b.offerType  || offer?.type  || '';
       const venue      = b.venue      || offer?.location || '';
@@ -936,13 +1179,9 @@ router.get('/:id/documents.csv', async (req, res) => {
                         : 0;
       const currency   = 'EUR';
 
-      const base = {
-        bookingId: bid,
-        offerTitle, offerType, venue, price, currency,
-        status: b.status,
-      };
+      const base = { bookingId: bid, offerTitle, offerType, venue, price, currency, status: b.status };
 
-      // participation – immer möglich
+      // participation
       docs.push({
         id: `${bid}:participation`,
         type: 'participation',
@@ -964,7 +1203,6 @@ router.get('/:id/documents.csv', async (req, res) => {
           ...base,
         });
 
-        // Storno: in CSV geben wir hier den (Basis-)Betrag aus (Offer-Preis oder 0)
         docs.push({
           id: `${bid}:storno`,
           type: 'storno',
@@ -976,12 +1214,12 @@ router.get('/:id/documents.csv', async (req, res) => {
       }
     }
 
-    // Filter anwenden
+    // Filter
     let filtered = docs.filter(d => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
     if (from) filtered = filtered.filter(d => new Date(d.issuedAt) >= from);
     if (to)   filtered = filtered.filter(d => new Date(d.issuedAt) <= to);
 
-    // Sortieren
+    // Sort
     filtered.sort((a, b) => {
       const av = new Date(a[sortKey] || 0).getTime();
       const bv = new Date(b[sortKey] || 0).getTime();
@@ -989,7 +1227,7 @@ router.get('/:id/documents.csv', async (req, res) => {
       return (av < bv ? -1 : 1) * sortMul;
     });
 
-    // --- CSV streamen ---
+    // CSV streamen
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="customer-${id}-documents.csv"`);
 
@@ -999,52 +1237,96 @@ router.get('/:id/documents.csv', async (req, res) => {
       if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
       return s;
     };
+    function fmtDEDate(value) {
+      if (!value) return '';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat('de-DE', {
+        timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric',
+      }).format(d);
+    }
 
-    
-function fmtDEDate(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('de-DE', {
-    timeZone: 'Europe/Berlin',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(d);
-}
-
-
-    // NEU: venue, price, currency in den Header aufnehmen
+    // Erweiterte Header
     const headers = [
       'id','bookingId','type','title','issuedAt','status',
-      'offerTitle','offerType','venue','price','currency','href'
+      'offerTitle','offerType','venue','price','currency','href',
+      'invoiceNo','invoiceDate','refInvoiceNo','refInvoiceDate',
+      'cancellationNo','stornoNo','stornoAmount'
     ];
     res.write(headers.join(',') + '\n');
 
     for (const d of filtered) {
-      const row = [
-        d.id,
-        d.bookingId,
-        d.type,
-        d.title,
-        
-        fmtDEDate(d.issuedAt),
-        d.status || '',
-        d.offerTitle || '',
-        d.offerType || '',
-        d.venue || '',
-        (typeof d.price === 'number' ? d.price : ''), // roh als Zahl (Excel formatiert)
-        d.currency || 'EUR',
-        d.href || '',
-      ].map(esc).join(',');
-      res.write(row + '\n');
-    }
+  const b = (customer.bookings || []).find(x => String(x._id) === d.bookingId) || {};
+
+  const isPart   = d.type === 'participation';
+  const isCanc   = d.type === 'cancellation';
+  const isStorno = d.type === 'storno';
+
+  // Hauptrechnung: immer normalisiert, wenn vorhanden
+  const invoiceNo   = normalizeInvoiceNo(b.invoiceNumber || b.invoiceNo || '');
+  const invoiceDate = b.invoiceDate || null;
+
+  // Referenzrechnung: nur bei cancellation/storno, sonst leer
+  const refNoRaw = b.refInvoiceNo || b.invoiceNumber || b.invoiceNo || '';
+  const refNo    = isPart ? '' : normalizeInvoiceNo(refNoRaw);
+  const refDate  = isPart ? null : (b.refInvoiceDate || b.invoiceDate || null);
+
+  // Nur im passenden Dokumenttyp ausgeben
+  const cancellationNo = isCanc   ? (b.cancellationNo || '') : '';
+  const stornoNo       = isStorno ? (b.stornoNo || '')       : '';
+
+  // Storno-Betrag nur bei storno
+  const stornoAmount = isStorno
+    ? (typeof b.stornoAmount === 'number' ? b.stornoAmount
+       : (typeof d.price === 'number' ? d.price : ''))
+    : '';
+
+  const row = [
+    d.id,
+    d.bookingId,
+    d.type,
+    d.title,
+    fmtDEDate(d.issuedAt),
+    d.status || '',
+    d.offerTitle || '',
+    d.offerType || '',
+    d.venue || '',
+    (typeof d.price === 'number' ? d.price : ''),
+    d.currency || 'EUR',
+    d.href || '',
+
+    invoiceNo || '',
+    fmtDEDate(invoiceDate),
+
+    refNo || '',
+    fmtDEDate(refDate),
+
+    cancellationNo || '',
+    stornoNo || '',
+    stornoAmount
+  ].map(esc).join(',');
+
+  res.write(row + '\n');
+}
+
+
     res.end();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1180,44 +1462,143 @@ router.get('/:id/documents.zip', async (req, res) => {
 
     const safe = (s) => String(s || '').replace(/[^\w.\- äöüÄÖÜß]/g, '_').slice(0, 120);
 
-    // Worker: PDF bauen & direkt anhängen
-    async function processDoc(d) {
-      const booking = (customer.bookings || []).find(b => String(b._id) === d.bookingId);
-      if (!booking) return;
+  
 
-      // Angebot nachladen (für Titel/Ort/Preis – auch für Storno-Betrag)
-      let offer = null;
-      if (booking.offerId) {
-        try { offer = await Offer.findById(booking.offerId).lean(); } catch {}
-      }
 
-      // Snapshots (ohne DB-Write)
-      const snap = { ...booking };
-      if (offer) {
-        snap.offerTitle = snap.offerTitle || offer.title || '';
-        snap.offerType  = snap.offerType  || offer.type  || '';
-        snap.venue      = snap.venue      || offer.location || '';
-      }
 
-      let buf;
-      if (d.type === 'participation') {
-        buf = await buildParticipationPdf({ customer, booking: snap, offer });
-      } else if (d.type === 'cancellation') {
-        const date = snap.cancelDate || new Date();
-        const reason = snap.cancelReason || '';
-        buf = await buildCancellationPdf({ customer, booking: snap, offer, date, reason });
-      } else if (d.type === 'storno') {
-        // Betrag: wenn nichts angegeben, auf offer.price zurückfallen
-        const amount = (offer && typeof offer.price === 'number') ? offer.price : 0;
-        buf = await buildStornoPdf({ customer, booking: snap, offer, amount, currency: 'EUR' });
-      } else {
-        return;
-      }
 
-      const dateStr = d.issuedAt ? new Date(d.issuedAt).toISOString().slice(0,10) : 'undated';
-      const name = `${dateStr} - ${safe(d.title)}.pdf`;
-      archive.append(buf, { name });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// …im ZIP-Route-Handler:
+function fmtISO(v) {
+  if (!v) return 'undated';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 'undated' : d.toISOString().slice(0, 10);
+}
+const LABELS = {
+  participation: 'Teilnahmebestätigung',
+  cancellation:  'Kündigungsbestätigung',
+  storno:        'Storno-Rechnung',
+};
+
+// Worker: PDF bauen & direkt anhängen (mit Nummern & schönen Dateinamen)
+async function processDoc(d) {
+  const booking = (customer.bookings || []).find(b => String(b._id) === d.bookingId);
+  if (!booking) return;
+
+  // Angebot nachladen (für Titel/Ort/Preis)
+  let offer = null;
+  if (booking.offerId) {
+    try { offer = await Offer.findById(booking.offerId).lean(); } catch {}
+  }
+
+  // Snapshot ohne DB-Write
+  const snap = { ...booking };
+  if (offer) {
+    snap.offerTitle = snap.offerTitle || offer.title || '';
+    snap.offerType  = snap.offerType  || offer.type  || '';
+    snap.venue      = snap.venue      || offer.location || '';
+  }
+
+  // Referenzrechnung (normalisiert)
+  const refNo   = normalizeInvoiceNo(
+    snap.refInvoiceNo || snap.invoiceNumber || snap.invoiceNo || ''
+  );
+  const refDate = snap.refInvoiceDate || snap.invoiceDate || null;
+
+  // Hilfsfunktion: passende Doku-Nummer für den Dateinamen
+  function pickDocNoFor(type, s) {
+    if (type === 'participation') {
+      return normalizeInvoiceNo(s.invoiceNumber || s.invoiceNo || '');
     }
+    if (type === 'cancellation') {
+      return normalizeInvoiceNo(s.cancellationNo || '');
+    }
+    if (type === 'storno') {
+      const stor = normalizeInvoiceNo(s.stornoNo || '');
+      if (stor) return stor;
+      const ref = normalizeInvoiceNo(s.refInvoiceNo || s.invoiceNumber || s.invoiceNo || '');
+      return ref ? `REF-${ref}` : '';
+    }
+    return '';
+  }
+
+  let buf;
+  if (d.type === 'participation') {
+    buf = await buildParticipationPdf({
+      customer,
+      booking: snap,
+      offer,
+    });
+  } else if (d.type === 'cancellation') {
+    const date = snap.cancelDate || new Date();
+    const reason = snap.cancelReason || '';
+    buf = await buildCancellationPdf({
+      customer,
+      booking: snap,
+      offer,
+      date,
+      reason,
+      cancellationNo : snap.cancellationNo || undefined,
+      refInvoiceNo   : refNo || undefined,
+      refInvoiceDate : refDate || undefined,
+    });
+  } else if (d.type === 'storno') {
+    const amount = (offer && typeof offer.price === 'number') ? offer.price : 0;
+    buf = await buildStornoPdf({
+      customer,
+      booking: snap,
+      offer,
+      amount,
+      currency       : 'EUR',
+      stornoNo       : snap.stornoNo || undefined,
+      refInvoiceNo   : refNo || undefined,
+      refInvoiceDate : refDate || undefined,
+    });
+  } else {
+    return;
+  }
+
+  // Dateiname: YYYY-MM-DD - <Label> - <Nr?> - <Titel>.pdf
+  const dateStr = fmtISO(d.issuedAt);
+  const label   = LABELS[d.type] || d.type;
+  const docNo   = pickDocNoFor(d.type, snap);
+  const title   = snap.offerTitle || snap.offerType || 'Angebot';
+
+  const parts = [dateStr, label];
+  if (docNo) parts.push(docNo);
+  parts.push(title);
+
+  const filename = parts.join(' - ');
+  const name = safe(filename) + '.pdf'; // safe hast du schon oben definiert
+  archive.append(buf, { name });
+}
+
+
+
+
+
+
+
+
 
     // Bis zu 3 PDFs parallel bauen → viel schneller, aber speicherschonend
     await runWithConcurrency(docs, 3, processDoc);
@@ -1234,7 +1615,6 @@ router.get('/:id/documents.zip', async (req, res) => {
 
 
 module.exports = router;
-
 
 
 
