@@ -1,3 +1,5 @@
+
+
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -10,7 +12,7 @@
 
   <mj-body background-color="#f5f7fb">
     <!-- Header (blau, kompakt, zentriert) -->
-    <mj-section background-color="#2563eb" padding="12px 24px">
+    <mj-section background-color="#3e6294" padding="12px 24px">
       <mj-column width="100%" vertical-align="middle">
         <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0 0 6px 0" align="center" />
         <mj-text font-size="18px" font-weight="700" align="center" padding="0" color="#ffffff">
@@ -111,6 +113,13 @@
     </mj-section>
   </mj-body>
 </mjml>
+
+
+
+
+
+
+
 
 
 
