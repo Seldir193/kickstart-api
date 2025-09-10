@@ -1,3 +1,5 @@
+
+
 /* --- A4 Seite & Typo --- */
 @page { size: A4; margin: 15mm 15mm 18mm 15mm; }
 
@@ -11,50 +13,87 @@ html, body {
 a { color: inherit; text-decoration: none; }
 
 
-/* --- Topband (wie im Screenshot) --- */
+/* ================= Topband (kompakt, Logo rechts) ================= */
+.doc { position: relative; padding-top: 6mm; }  /* Seite minimal nach unten rücken */
+
 .topband {
-   background: #1f2937;
-  color: #fff;
-  padding: 6px 10px;
-  font-weight: 700;
-  letter-spacing: .2px;
+  position: relative;
+  height: 7mm;                   /* kompakter Balken */
+  background: #3e6294 ;            /* dein Blau */
+  border-radius: 2mm;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 10mm;
+  z-index: 1;
+overflow: visible;
+  transform: translateY(var(--header-shift));
 }
-.topband .claim { opacity: .9; font-weight: 600; }
-.topband .right { float: right; opacity: .85; }
-
-/* --- Header --- */
-.header {
-  display: flex; justify-content: space-between; align-items: center; gap: 16px;
-  margin-top: 10px;
+.topband .claim{
+  color:#fff;
+  font-weight:900;
+  font-size:4.8mm;                /* kleiner, wirkt „weißer“ */
+  letter-spacing:.2px;
+  text-shadow:0 1px 0 rgba(0,0,0,.18);
 }
-.brand-left { display: flex; align-items: center; gap: 16px; }
-.logo { max-height: 50px; }
-.h1 { font-size: 20px; font-weight: 700; margin: 0; }
-.h2 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+.topband .right { display:none; }
 
-/* Linie nur unter Header */
-.hr { border: 0; border-top: 1px solid #e5e7eb; margin: 10px 0 16px; }
+/* Logo im Balken – nicht abgeschnitten, ca. 3/4 im Blau */
+.topband .brand-logo{
+  position:absolute;
+  right:10mm;
+                     /* positiv => nichts ragt aus dem Seitenrand */
+  width:30mm;                     /* bei Bedarf 28–34mm */
+  display:block;
+  z-index:2;
 
-/* --- Adressblock / Betreff / Intro --- */
-.addr {
+  top: -2.2mm !important;
+}
+
+
+:root {
+  /* hier einfach anpassen: -2mm, -3mm, -4mm ... */
+  --header-shift: -3mm;
+}
+
+
+/* Brand-Zeile kleiner und etwas weiter unten;
+   Adresse bleibt dicht dran */
+.brand-line{
+  font-size: 5.5pt;     /* kleiner als vorher */
+  margin: 3mm 0 .8mm;   /* weiter runter (top=3mm), unten dicht an Adresse */
+}
+
+/* Adresse noch näher an die Brand-Zeile */
+.addr{
   white-space: pre-line;
-  margin: 2px 0 10px;
 }
-.subject { font-size: 16px; font-weight: 700; margin: 8px 0 6px; }
-.intro { margin: 6px 0 12px; }
 
-/* --- Fakten (mono wie im Beispiel) --- */
+.addr + .h2{
+  margin-top: 22mm !important;   /* mehr Abstand als bisher (war ~7mm) */
+}
+
+/* vorhandene dünne Linie unter dem Kopf (nicht neu) */
+.hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1.2mm 0 2mm; }
+
+
+/* ================= Typografie / Sektionen ================= */
+.h1 { font-size: 20px; font-weight: 700; margin: 0; }
+.h2 { font-size: 16px; font-weight: 600; margin: 7mm 0 8px; }
+.subject { font-size: 16px; font-weight: 700; margin: 5mm 0 6px; }
+.intro { margin: 4mm 0 12px; }
+
+
+/* Fakten (mono) */
 .facts { margin: 6px 0 10px; }
 .facts .row { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
 .facts .k { display: inline-block; width: 160px; color: #6b7280; }
 .facts .v { opacity: .95; }
 
-/* --- Key-Value Grid (für größere Blöcke) --- */
+/* Key-Value Grid (optional) */
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; margin: 8px 0 12px; }
 .kv .k { color: #6b7280; }
 .kv .v { color: #111827; }
 
-/* --- Tabelle (Positionen) --- */
+/* Tabelle (Positionen) */
 .table { width: 100%; border-collapse: collapse; margin-top: 6px; }
 .table th, .table td { padding: 8px 10px; }
 .table thead th { border-bottom: 1px solid #e5e7eb; }
@@ -62,24 +101,79 @@ a { color: inherit; text-decoration: none; }
 .ta-center { text-align: center; }
 .ta-right  { text-align: right; }
 
-/* --- Summe --- */
+/* Summe */
 .totals { display: flex; justify-content: flex-end; align-items: baseline; gap: 12px; margin-top: 10px; }
 .totals .label { color: #6b7280; }
 .totals .amount { font-weight: 700; }
 
-/* --- Footer fix unten --- */
-.footer {
+
+
+  /* Erste Spalte der Positionstabelle bündig zum Haupt-Textbereich */
+  .table--flush-left thead th:first-child,
+  .table--flush-left tbody td:first-child{
+    padding-left: 0 !important;   /* statt der Standard 10px */
+  }
+
+
+
+
+.totals--align-facts{
+    justify-content: flex-end !important;
+    padding-right: 9px; /* entspricht .facts .k (Beschriftungsspalte) */
+  }
+
+
+
+
+/* kein Extra-Abstand zwischen Datum- und Ortszeile */
+.intro-confirm { margin-top: 3mm; }   /* nur oben Luft zum vorherigen Block */
+.intro-confirm br { line-height: 1; } /* kompaktere Zeilenumbrüche innerhalb des Blocks */
+
+/* Zahlungshinweis: Zeilen direkt untereinander */
+.payment-note { margin-top: 3mm; }
+.payment-note > div + div { margin-top: 0; }  /* kein zusätzlicher Abstand */
+
+.offer-title { display:block; margin:0; font-weight:700; }
+.intro-confirm .line { display:block; margin:0; line-height:1.45; }
+
+
+/* ==== Footer exakt auf Content-Breite (180mm) zentrieren ==== */
+.footer{
   position: fixed;
-  left: 15mm; right: 15mm; bottom: 10mm;
-  border-top: 1px solid #e5e7eb; padding-top: 8px;
-  font-size: 11px; background: #fff;
+  left: 0; right: 0; bottom: 10mm;
+  background: #fff;
+  display: flex;                /* zentriert den inneren Container */
+  justify-content: center;
+  /* keine border-top hier */
 }
-/* Platzhalter, damit Inhalt nicht unter Fußzeile rutscht */
-.footer-spacer { height: 24mm; }
 
-/* Utilities */
-.m-0 { margin: 0; }
+/* Container im Footer: volle Textbreite + Linie */
+.footer > .foot,
+.footer > .foot-inner{
+  box-sizing: border-box;
+  width: 180mm;                 /* 210mm - 2*15mm */
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;            /* Abstand Linie → Text */
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  margin: 0;                    /* keine Außenabstände nötig */
+}
+
+/* etwas Luft zwischen den Zeilen */
+.footer > .foot > div + div,
+.footer > .foot-inner > div + div{
+  margin-top: 3px;
+}
+
+/* Platz für fixen Footer */
+.footer-spacer{ height: 24mm; }
+
+
+
+
 .small { color: #6b7280; font-size: 11px; }
+.m-0 { margin: 0; }
 
 
 
@@ -97,3 +191,71 @@ a { color: inherit; text-decoration: none; }
 
 
 
+
+
+
+
+
+
+
+/* Kündigung: Überschrift tiefer */
+.subject-cancel { margin-top: 22mm !important; }
+
+
+
+/* … dann mit extra Abstand die Bestätigung */
+.intro-confirmation { margin-top: 3mm !important; }
+
+/* die 4 Zeilen dicht unter der Überschrift + großer Abstand nach unten */
+.facts-cancel {
+  margin-top: 8.5mm !important;
+  margin-bottom: 15mm !important;  /* << großer Abstand */
+}
+
+/* danach startet der Text direkt (kein zusätzlicher Top-Margin hier) */
+.intro-regret { margin-top: 0 !important; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Footer kompakt */
+.footer .foot-inner{
+  font-size:12px;
+  line-height:1.30;
+  text-align:center;
+}
+
+.footer-line{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:8px 12px;
+}
+
+.footer-item{
+  white-space:nowrap;          /* verhindert hässliche Umbrüche innerhalb eines Items */
+}
+
+/* dezente Trenner-Punkte */
+.sep{
+  color:#6b7280;               /* Grau wie im Rest-Theme */
+  user-select:none;
+}
+
+/* Links im Footer unaufdringlich */
+.footer .foot-inner a{
+  color:inherit;
+  text-decoration:none;
+}
