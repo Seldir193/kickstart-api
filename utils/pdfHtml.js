@@ -1,7 +1,3 @@
-
-
-
-
 // utils/pdfHtml.js
 'use strict';
 
@@ -21,7 +17,7 @@ function toDate(v) {
   const d = (v instanceof Date) ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
 }
-function toISODate(v) { const d = toDate(v); return d ? d.toISOString().slice(0,10) : ''; }
+function toISODate(v) { const d = toDate(v); return d ? d.toISOString().slice(0, 10) : ''; }
 function toDEDate(v)  { const d = toDate(v); return d ? new Intl.DateTimeFormat('de-DE').format(d) : ''; }
 
 /* ====================== Assets ====================== */
@@ -71,14 +67,14 @@ function getBrand() {
   }
 
   return {
-    company: process.env.BRAND_COMPANY     || 'KickStart Academy',
-    addr1:   process.env.BRAND_ADDR_LINE1  || 'Beispielstraße 1',
-    addr2:   process.env.BRAND_ADDR_LINE2  || '47000 Duisburg',
-    email:   process.env.BRAND_EMAIL       || 'info@kickstart-academy.de',
-    website: process.env.BRAND_WEBSITE_URL || 'https://www.selcuk-kocyigit.de',
-    iban:    process.env.BRAND_IBAN || '',
-    bic:     process.env.BRAND_BIC  || '',
-    taxId:   process.env.BRAND_TAXID|| '',
+    company: process.env.BRAND_COMPANY     || 'Münchner Fussball Schule NRW',
+    addr1:   process.env.BRAND_ADDR_LINE1  || 'Hochfelder Str. 33',
+    addr2:   process.env.BRAND_ADDR_LINE2  || '47226 Duisburg',
+    email:   process.env.BRAND_EMAIL       || 'info@muenchner-fussball-schule.ruhr',
+    website: process.env.BRAND_WEBSITE_URL || 'https://www.muenchner-fussball-schule.ruhr',
+    iban:    process.env.BRAND_IBAN        || 'DE13350400380595090200',
+    bic:     process.env.BRAND_BIC         || 'COBADEFFXXX',
+    taxId:   process.env.BRAND_TAXID       || '',
     logoUrl,
   };
 }
@@ -152,19 +148,17 @@ async function renderPdf(html, options = {}) {
   return htmlToPdf.generatePdf(file, opts);
 }
 
-/* ====================== Filler / Normalizer ====================== */
+/* ====================== Shapers & Normalizer ====================== */
 function hydrateCustomerWithBooking(customer = {}, booking = {}) {
   const parent = { ...(customer?.parent || {}) };
   const child  = { ...(customer?.child  || {}) };
 
-  // Parent-Namen aus Booking/Child auffüllen (damit {{fullName customer.parent}} nie leer ist)
   if (!parent.firstName && booking.firstName) parent.firstName = booking.firstName;
   if (!parent.lastName  && booking.lastName)  parent.lastName  = booking.lastName;
   if (!parent.firstName && child.firstName)   parent.firstName = child.firstName;
   if (!parent.lastName  && child.lastName)    parent.lastName  = child.lastName;
 
-  // E-Mail NICHT im PDF anzeigen -> nur temporär übernehmen
-  if (!parent.email && booking.email) parent.email = booking.email;
+  if (!parent.email && booking.email) parent.email = booking.email; // wird später entfernt
 
   return {
     userId : String(customer?.userId ?? customer?._id ?? '-'),
@@ -181,7 +175,6 @@ function applyOfferSnapshot(booking = {}, offer) {
     out.offerType  = out.offerType  || offer.type  || '';
     out.venue      = out.venue      || offer.location || '';
   }
-  // Einige Templates nutzen booking.offer
   if (!out.offer && (out.offerTitle || out.offerType)) {
     out.offer = out.offerTitle || out.offerType;
   }
@@ -190,27 +183,17 @@ function applyOfferSnapshot(booking = {}, offer) {
 
 function normalizeBookingForPdf(booking = {}) {
   const out = { ...booking };
-
-  // Venue-Fallback aus möglichem Snapshot
   if (!out.venue && out.offerLocation) out.venue = out.offerLocation;
-
-  // Cancel-Date robust
   out.cancelDate = out.cancelDate || out.cancellationDate || out.canceledAt || new Date();
-
-  // Datum robust (falls leeres/fehlendes date)
   out.date = out.date || out.createdAt || new Date();
-
-  // Komfortfelder
   out.dateISO = toISODate(out.date);
   out.dateDE  = toDEDate(out.date);
-
   return out;
 }
 
 /* ====================== Public API ====================== */
 
-// 1) Booking-Bestätigung (Legacy)
-// utils/pdfHtml.js
+/** Legacy booking confirmation (unused by new flow, kept for compatibility) */
 async function bookingPdfBufferHTML(booking) {
   const brand = getBrand();
 
@@ -230,9 +213,7 @@ async function bookingPdfBufferHTML(booking) {
       fullName: booking?.fullName || [booking?.firstName, booking?.lastName].filter(Boolean).join(' '),
       email: booking?.email || '',
       program: booking?.program || booking?.level || '',
-      // wichtig: hier direkt DE-formatiert reinschreiben
       date: dateDE,
-      // falls du im Template das ISO-Datum brauchst:
       dateISO: booking?.date || '',
       message: booking?.message || '',
       status: booking?.status || '',
@@ -249,46 +230,92 @@ async function bookingPdfBufferHTML(booking) {
 
 
 
-
-
-// utils/pdfHtml.js – in buildParticipationPdfHTML(...)
-async function buildParticipationPdfHTML({ customer, booking, offer }) {
+/** Teilnahmebestätigung + Rechnungsdaten (Kurzformat, Referenzen optional per Param) */
+async function buildParticipationPdfHTML({
+  customer,
+  booking,
+  offer,
+  invoiceNo,          // bevorzugt, z.B. "AT-25-0013"
+  invoiceDate,        // bevorzugt (Date|string)
+  monthlyAmount,      // optional Override
+  firstMonthAmount,   // optional Override
+  venue,              // optional Override
+}) {
   const brand = getBrand();
 
-  // vorhandene Hydrierung/Normalisierung
-  const parent = { ...(customer?.parent || {}) }; delete parent.email;
+  // parent/child ohne E-Mail im PDF
+  const parent = { ...(customer?.parent || {}) };
+  if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
   const child  = { ...(customer?.child  || {}) };
-  const venue  = booking?.venue || offer?.location || '';
-  const offerTitle = booking?.offerTitle || booking?.offerType || offer?.title || '-';
 
-  // Preis ermitteln
+  // venue & title robust (Param > booking > offer)
+  const finalVenue = venue || booking?.venue || offer?.location || '';
+  const title =
+    booking?.offerTitle ||
+    booking?.offerType  ||
+    booking?.offer      ||
+    offer?.title        ||
+    '-';
+
+  // --- PREISE ---
   const currency = 'EUR';
+
   const monthlyPrice =
-    (typeof booking?.monthlyAmount === 'number' ? booking.monthlyAmount :
-    (typeof offer?.price === 'number' ? offer.price : undefined));
+    (typeof monthlyAmount === 'number')              ? monthlyAmount
+  : (typeof booking?.monthlyAmount === 'number')     ? booking.monthlyAmount
+  : (typeof offer?.price === 'number')               ? offer.price
+  : undefined;
+
+  // Fallback: pro-rata aus Startdatum berechnen, wenn nichts kam
+  function prorateForStart(dateISO, monthly) {
+    const d = new Date((dateISO || '') + 'T00:00:00');
+    if (!monthly || Number.isNaN(d.getTime())) return undefined;
+    const daysInMonth   = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const startDay      = d.getDate();
+    const daysRemaining = daysInMonth - startDay + 1;
+    const factor        = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
+    return Math.round(monthly * factor * 100) / 100;
+  }
 
   const firstMonth =
-    (typeof booking?.firstMonthAmount === 'number' ? booking.firstMonthAmount : undefined);
+    (typeof firstMonthAmount === 'number')               ? firstMonthAmount
+  : (typeof booking?.firstMonthAmount === 'number')      ? booking.firstMonthAmount
+  : (booking?.date && typeof monthlyPrice === 'number')  ? prorateForStart(booking.date, monthlyPrice)
+  : undefined;
+
+  // --- RECHNUNG ---
+  const invoiceNumber  = invoiceNo || booking?.invoiceNo || booking?.invoiceNumber || '';
+  const invoiceDateRaw = invoiceDate || booking?.invoiceDate || '';
+  const taxNote        = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
 
   const html = compileTemplate('participation', {
     brand,
     customer: {
-      userId: customer?.userId ?? '-',
+      userId : customer?.userId ?? '-',
       parent,
       child,
       address: customer?.address || {},
     },
     booking: {
-      offerTitle,
-      date: booking?.date || '',
-      status: booking?.status || 'active',
-      venue,
+      offerTitle: title,
+      date:       booking?.date || '',
+      status:     booking?.status || 'active',
+      venue:      finalVenue,
     },
-    // <<< neu:
+    // fürs Template: pricing.*
     pricing: {
-      monthly: monthlyPrice,     // Zahl (z.B. 59)
-      firstMonth,                // optional Zahl
-      currency,                  // 'EUR'
+      monthly:   monthlyPrice,
+      firstMonth,
+      currency,
+    },
+    // fürs Template: invoice.*
+    invoice: {
+      number:   invoiceNumber,
+      date:     invoiceDateRaw,
+      monthly:  monthlyPrice,
+      firstMonth,
+      currency,
+      taxNote,
     },
   });
 
@@ -301,8 +328,21 @@ async function buildParticipationPdfHTML({ customer, booking, offer }) {
 
 
 
-// 3) Kündigungsbestätigung
-async function buildCancellationPdfHTML({ customer, booking, offer, date, reason }) {
+
+
+
+
+
+/** Kündigungsbestätigung (mit Kündigungs-Nr. + Referenz-Rechnung) */
+async function buildCancellationPdfHTML({
+  customer,
+  booking,
+  offer,
+  date,
+  reason,
+  cancellationNo,           // optional Override (z.B. "KND-925B67")
+  referenceInvoice,         // optional { number, date }
+}) {
   const brand = getBrand();
 
   const hydrated     = hydrateCustomerWithBooking(customer, booking);
@@ -313,6 +353,28 @@ async function buildCancellationPdfHTML({ customer, booking, offer, date, reason
   const parent = { ...hydrated.parent };
   if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
   const child = { ...hydrated.child };
+
+  const effectiveCancellationNo =
+    cancellationNo ||
+    normBooking.cancellationNo ||
+    normBooking.cancellationNumber ||
+    `KND-${String(normBooking._id || '').slice(-6).toUpperCase()}`;
+
+  const refInvoiceNo =
+    (referenceInvoice && referenceInvoice.number) ||
+    normBooking.refInvoiceNo ||
+    normBooking.originalInvoiceNo ||
+    normBooking.invoiceNo ||
+    normBooking.invoiceNumber ||
+    '';
+
+  const refInvoiceDate =
+    (referenceInvoice && referenceInvoice.date) ||
+    normBooking.refInvoiceDate ||
+    normBooking.originalInvoiceDate ||
+    normBooking.invoiceDate ||
+    '';
+  const refInvoiceDateDE = toDEDate(refInvoiceDate);
 
   const html = compileTemplate('cancellation', {
     brand,
@@ -328,6 +390,10 @@ async function buildCancellationPdfHTML({ customer, booking, offer, date, reason
       offer     : normBooking.offer || '',
       venue     : normBooking.venue || '',
       cancelDate,
+      cancellationNo: effectiveCancellationNo,
+      refInvoiceNo,
+      refInvoiceDate,
+      refInvoiceDateDE,
     },
     details: {
       cancelDate: toDate(cancelDate) || new Date(),
@@ -337,24 +403,53 @@ async function buildCancellationPdfHTML({ customer, booking, offer, date, reason
   return renderPdf(html);
 }
 
-// 4) Storno-Rechnung
-async function buildStornoPdfHTML({ customer, booking, offer, amount = 0, currency = 'EUR' }) {
+/** Storno-Rechnung (mit Storno-Nr. + Referenz-Rechnung) */
+async function buildStornoPdfHTML({
+  customer,
+  booking,
+  offer,
+  amount = 0,
+  currency = 'EUR',
+  stornoNo,                // optional Override (z.B. "STORNO-925CF4")
+  referenceInvoice,        // optional { number, date }
+}) {
   const brand = getBrand();
 
   const hydrated     = hydrateCustomerWithBooking(customer, booking);
   const withOffer    = applyOfferSnapshot(booking, offer);
   const normBooking  = normalizeBookingForPdf(withOffer);
 
-  // Betrag robust: amount (wenn numerisch) sonst fallback offer.price
   const amountNum =
-    Number.isFinite(Number(amount)) ? Number(amount) :
-    (offer && typeof offer.price === 'number' ? offer.price : 0);
+    Number.isFinite(Number(amount)) ? Number(amount)
+    : (offer && typeof offer.price === 'number' ? offer.price : 0);
 
   const curr = String(currency || 'EUR');
+  const taxNote = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
 
   const parent = { ...hydrated.parent };
-  if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email; // bewusst nicht im PDF
+  if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
   const child = { ...hydrated.child };
+
+  const effectiveStornoNo =
+    stornoNo ||
+    normBooking.stornoNo ||
+    `STORNO-${String(normBooking._id || '').slice(-6).toUpperCase()}`;
+
+  const refInvoiceNo =
+    (referenceInvoice && referenceInvoice.number) ||
+    normBooking.refInvoiceNo ||
+    normBooking.originalInvoiceNo ||
+    normBooking.invoiceNo ||
+    normBooking.invoiceNumber ||
+    '';
+
+  const refInvoiceDate =
+    (referenceInvoice && referenceInvoice.date) ||
+    normBooking.refInvoiceDate ||
+    normBooking.originalInvoiceDate ||
+    normBooking.invoiceDate ||
+    '';
+  const refInvoiceDateDE = toDEDate(refInvoiceDate);
 
   const html = compileTemplate('storno', {
     brand,
@@ -371,9 +466,14 @@ async function buildStornoPdfHTML({ customer, booking, offer, amount = 0, curren
       offer     : normBooking.offer || '',
       venue     : normBooking.venue || '',
       cancelDate: normBooking.cancelDate,
+      stornoNo : effectiveStornoNo,
+      refInvoiceNo,
+      refInvoiceDate,
+      refInvoiceDateDE,
     },
     amount: amountNum,
     currency: curr,
+    taxNote,
   });
 
   return renderPdf(html);
@@ -385,17 +485,6 @@ module.exports = {
   buildCancellationPdfHTML,
   buildStornoPdfHTML,
 };
-
-
-
-
-
-
-
-
-
-
-
 
 
 
