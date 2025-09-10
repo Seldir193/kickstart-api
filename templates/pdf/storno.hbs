@@ -1,3 +1,6 @@
+
+
+
 <!doctype html>
 <html lang="de">
 <head>
@@ -5,59 +8,90 @@
   <title>Storno-Rechnung – {{brand.company}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
+
+  <!-- gezielte Abstände NUR für Storno -->
+  <style>
+    /* Überschrift wie bei Cancellation 22mm nach unten */
+    .subject-storno { margin-top: 22mm !important; }
+
+    /* Datenblock: knapp unter der Überschrift + großer Abstand nach unten */
+    .facts-storno {
+      margin-top: 8.5mm !important;
+      margin-bottom: 15mm !important;
+    }
+
+    /* Fließtext direkt starten (kein Extra-Top-Margin) */
+    .intro-storno { margin-top: 0 !important; }
+  </style>
 </head>
 <body>
 <main class="doc">
 
-  <!-- Topband -->
+  <!-- Topband ohne Mail/Website (Logo rechts im Balken) -->
   <div class="topband">
-    <span class="claim">{{brand.company}} • {{#if brand.website}}{{brand.website}}{{/if}}</span>
-    <span class="right">{{brand.email}}</span>
+    <span class="claim">{{brand.company}}</span>
+    <span class="right"></span>
+    {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
   </div>
 
-  <!-- Header -->
-  <section class="header">
-    <div class="brand-left">
-      {{#if brand.logoUrl}}<img class="logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
-      <div class="h1">Storno-Rechnung</div>
-    </div>
-    <div class="brand-right small">
-      <div>{{brand.addr1}}</div>
-      <div>{{brand.addr2}}</div>
-    </div>
-  </section>
-  <hr class="hr"/>
+  <!-- Kleine Zeile nah an der Adresse -->
+  <div class="brand-line">
+    {{brand.company}} | {{brand.addr2}} | {{brand.addr1}}
+  </div>
 
-  <!-- Adressblock -->
+  <!-- Empfängeradresse -->
   <div class="addr">
 {{fullName customer.parent}}
 {{#if customer.address.street}}{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}{{/if}}
 {{#if customer.address.zip}}{{customer.address.zip}}{{/if}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
   </div>
 
-  <!-- Betreff + Intro -->
-  <div class="subject">Gutschrift zur Stornierung</div>
-  <div class="intro">
-    Wir bestätigen die Stornierung für <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong>
-    am Standort <strong>{{booking.venue}}</strong>.
+  <!-- Überschrift -->
+  <div class="subject subject-storno">Storno-Rechnung</div>
+
+  <!-- Storno-Daten -->
+  <div class="facts facts-storno">
+    {{#if booking.stornoNo}}
+      <div class="row"><span class="k">Storno-Nr.:</span> <span class="v">{{booking.stornoNo}}</span></div>
+    {{/if}}
+
+    {{#if booking.refInvoiceNo}}
+      <div class="row">
+        <span class="k">zur Rechnung:</span>
+        <span class="v">
+          {{booking.refInvoiceNo}}
+          {{#if booking.refInvoiceDateDE}} vom {{booking.refInvoiceDateDE}}{{/if}}
+        </span>
+      </div>
+    {{/if}}
+
+    <div class="row">
+      <span class="k">Betrag:</span>
+      <span class="v">
+        {{fmtMoney amount currency}} (Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG)
+      </span>
+    </div>
+
+    <div class="row"><span class="k">Kunden-Nr.:</span>   <span class="v">{{customer.userId}}</span></div>
+    <div class="row"><span class="k">Stornodatum:</span>  <span class="v">{{fmtDate booking.cancelDate}}</span></div>
   </div>
 
-  <!-- Fakten (mono) -->
-  <div class="facts">
-    <div class="row"><span class="k">Kundennummer:</span> <span class="v">{{customer.userId}}</span></div>
-    <div class="row"><span class="k">Erziehungsberechtigte/r:</span> <span class="v">{{fullName customer.parent}}</span></div>
-    <div class="row"><span class="k">Kind:</span> <span class="v">{{customer.child.firstName}} {{customer.child.lastName}}</span></div>
-    <div class="row"><span class="k">Kündigungsdatum:</span> <span class="v">{{fmtDate booking.cancelDate}}</span></div>
-    <div class="row"><span class="k">Angebot:</span> <span class="v">
+  <!-- Fließtext (Angebot auf eigene Zeile) -->
+  <div class="intro intro-storno">
+    Stornierung der Teilnahme von
+    <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong>
+    an unserem Angebot
+    <strong><br/>
       {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}
         {{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}
       {{/if}}
-    </span></div>
+    </strong><br/>
+    am Veranstaltungsort <strong>{{booking.venue}}</strong>.
   </div>
 
   <!-- Positionen -->
   <h2 class="h2">Positionen</h2>
-  <table class="table">
+  <table class="table table--flush-left">
     <thead>
       <tr>
         <th>Beschreibung</th>
@@ -68,7 +102,12 @@
     </thead>
     <tbody>
       <tr>
-        <td>Gutschrift – Storno {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}{{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}{{/if}}</td>
+        <!-- KEIN "Gutschrift" mehr -->
+        <td>Storno der Teilnahmegebühr –
+          {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}
+            {{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}
+          {{/if}}
+        </td>
         <td class="ta-center">1</td>
         <td class="ta-right">{{fmtMoney amount currency}}</td>
         <td class="ta-right">{{fmtMoney amount currency}}</td>
@@ -76,27 +115,60 @@
     </tbody>
   </table>
 
-  <div class="totals">
+  <div class="totals totals--align-facts">
     <div class="label">Gesamt</div>
     <div class="amount">{{fmtMoney amount currency}}</div>
   </div>
 
-  <!-- Abstand für fixen Footer -->
+
+
   <div class="footer-spacer"></div>
 
-  <!-- Footer -->
-  <section class="footer">
-    <div>{{brand.company}} • {{brand.addr1}} • {{brand.addr2}}</div>
-    <div>
-      <a href="mailto:{{brand.email}}">{{brand.email}}</a>
-      {{#if brand.website}} • <a href="{{brand.website}}">{{brand.website}}</a>{{/if}}
+ 
+<section class="footer">
+  <div class="foot-inner">
+    <div class="footer-line">
+      <span class="footer-item">{{brand.company}} • {{brand.addr1}} • {{brand.addr2}}</span>
+      <span class="sep">•</span>
+      <a class="footer-item" href="mailto:{{brand.email}}">{{brand.email}}</a>
+      <a class="footer-item" href="{{brand.website}}">
+        {{#if brand.websiteShort}}{{brand.websiteShort}}{{else}}{{brand.website}}{{/if}}
+      </a>
+      <span class="sep">•</span>
+      <span class="footer-item">IBAN: {{brand.iban}}</span>
+      <span class="sep">•</span>
+      <span class="footer-item">BIC: {{brand.bic}}</span>
     </div>
-    <div class="small">IBAN: {{brand.iban}} • BIC: {{brand.bic}} • Steuer-ID: {{brand.taxId}}</div>
-  </section>
+  </div>
+</section>
+
 
 </main>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
