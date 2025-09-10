@@ -52,19 +52,27 @@ const eur = (n, currency = 'EUR') =>
 
 const fullName  = (p) => [p?.salutation, p?.firstName, p?.lastName].filter(Boolean).join(' ');
 
+
+
+
+
 function getBrandAndLogoCidAttachment() {
   const brand = {
-    company: process.env.BRAND_COMPANY      || 'KickStart Academy',
-    addr1:   process.env.BRAND_ADDR_LINE1   || 'Beispielstraße 1',
-    addr2:   process.env.BRAND_ADDR_LINE2   || '47000 Duisburg',
-    email:   process.env.BRAND_EMAIL        || 'info@kickstart-academy.de',
-    website: process.env.BRAND_WEBSITE_URL  || 'https://www.selcuk-kocyigit.de',
-    iban:    process.env.BRAND_IBAN || '',
-    bic:     process.env.BRAND_BIC  || '',
-    taxId:   process.env.BRAND_TAXID|| '',
+    company: process.env.BRAND_COMPANY     || 'Münchner Fussball Schule NRW',
+    addr1:   process.env.BRAND_ADDR_LINE1  || 'Hochfelder Str. 33',
+    addr2:   process.env.BRAND_ADDR_LINE2  || '47226 Duisburg',
+    email:   process.env.BRAND_EMAIL       || 'info@muenchner-fussball-schule.ruhr',
+    website: process.env.BRAND_WEBSITE_URL || 'https://www.muenchner-fussball-schule.ruhr',
+    iban:    process.env.BRAND_IBAN        || 'DE13350400380595090200',
+    bic:     process.env.BRAND_BIC         || 'COBADEFFXXX',
+    taxId:   process.env.BRAND_TAXID       || '',
   };
 
-  const rawLogo = process.env.BRAND_LOGO_URL || process.env.BRAND_LOGO_PATH || process.env.PDF_LOGO || '';
+  const rawLogo =
+    process.env.BRAND_LOGO_URL ||
+    process.env.BRAND_LOGO_PATH ||
+    process.env.PDF_LOGO ||
+    '';
 
   // HTTP/HTTPS direkt
   if (/^https?:\/\//i.test(rawLogo)) {
@@ -83,12 +91,16 @@ function getBrandAndLogoCidAttachment() {
   return { brand, logoAttachment: null, logoUrl: '' };
 }
 
-/* ================= Generic sender ================= */
+
+
+
+
+
 async function sendMail({ to, subject, text, html, attachments = [], cc, bcc }) {
   const effectiveBcc = (bcc ?? process.env.MAIL_BCC) ?? undefined;
 
   return getTransporter().sendMail({
-    from: process.env.FROM_EMAIL || 'noreply@kickstart-academy.de',
+    from: process.env.FROM_EMAIL || 'info@muenchner-fussball-schule.ruhr',
     to,
     subject,
     text: text ?? '',
@@ -98,6 +110,8 @@ async function sendMail({ to, subject, text, html, attachments = [], cc, bcc }) 
     bcc: effectiveBcc,
   });
 }
+
+
 
 /* ================= Buchungs-MJML (unverändert) ================= */
 
@@ -175,7 +189,7 @@ async function sendBookingCancelledEmail({ to, booking }) {
   const ctx = {
     brand: { ...brand, logoUrl },
     greetingName: booking.firstName || 'Sportfreund',
-    headline: 'Stornierung deiner Buchung',
+    headline: 'Absage Kurs findet nicht statt',
     program: booking.program || booking.level || 'Programm',
     dateDE: booking.date ? new Date(booking.date).toLocaleDateString('de-DE') : '',
     confirmationCode: booking.confirmationCode || '',
@@ -207,7 +221,7 @@ async function sendBookingCancelledEmail({ to, booking }) {
 
   await sendMail({
     to,
-    subject: `Stornierung – ${ctx.program}${ctx.dateDE ? ` am ${ctx.dateDE}` : ''}${ctx.confirmationCode ? ` (${ctx.confirmationCode})` : ''}`,
+    subject: `Absage – ${ctx.program}${ctx.dateDE ? ` am ${ctx.dateDE}` : ''}${ctx.confirmationCode ? ` (${ctx.confirmationCode})` : ''}`,
     text,
     html,
     attachments: logoAttachment ? [logoAttachment] : [],
@@ -219,99 +233,256 @@ async function sendBookingCancelledEmail({ to, booking }) {
 
 
 
+
+
+
+
+
+
+
+
+
+
 /** Teilnahmebestätigung */
 async function sendParticipationEmail({ to, customer, booking, offer, pdfBuffer }) {
   if (!to) return;
 
-  // --- Preis auflösen (booking.monthlyAmount > sonst offer.price)
-  const currency = 'EUR';
+  /* ---------- Helpers ---------- */
+  const eur = (n) =>
+    (typeof n === 'number' && Number.isFinite(n))
+      ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n)
+      : '';
 
-  const monthlyRaw =
-    (booking && typeof booking.monthlyAmount === 'number') ? booking.monthlyAmount
-    : (offer && typeof offer.price === 'number') ? offer.price
-    : undefined;
+  const fmtDE = (d) =>
+    d ? new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin' }).format(d) : '';
 
-  const monthly = Number.isFinite(Number(monthlyRaw)) ? Number(monthlyRaw) : undefined;
+  function parseISOorDate(v) {
+    if (!v) return null;
+    if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+    const s = String(v);
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
 
-  // Optional: pro-rata berechnen, falls Admin NICHTs geschickt hat
-  function prorateForStart(dateISO, monthlyPrice) {
-    const d = new Date((dateISO || '') + 'T00:00:00');
-    if (!monthlyPrice || Number.isNaN(d.getTime())) return null;
-    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    const startDay = d.getDate();
-    const daysRemaining = daysInMonth - startDay + 1;
-    const factor = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
+  // Prorata: inkl. Starttag
+  function prorateForStart(startDateObj, monthlyPrice) {
+    if (!(startDateObj instanceof Date)) return null;
+    if (typeof monthlyPrice !== 'number' || !Number.isFinite(monthlyPrice)) return null;
+    const y = startDateObj.getFullYear();
+    const m = startDateObj.getMonth();
+    const daysInMonth   = new Date(y, m + 1, 0).getDate();
+    const startDay      = startDateObj.getDate();
+    const daysRemaining = Math.max(0, daysInMonth - startDay + 1);
+    const factor        = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
     return Math.round(monthlyPrice * factor * 100) / 100;
   }
 
-  const firstMonth =
-    (booking && typeof booking.firstMonthAmount === 'number') ? booking.firstMonthAmount
-    : (monthly && booking?.date) ? prorateForStart(booking.date, monthly)
+  /* ---------- Preise (Booking-Overrides > Offer) ---------- */
+  const monthlyRaw =
+      (typeof booking?.monthlyAmount === 'number') ? booking.monthlyAmount
+    : (typeof booking?.priceMonthly  === 'number') ? booking.priceMonthly
+    : (typeof offer?.price           === 'number') ? offer.price
     : undefined;
 
-  // PDF (falls nicht schon gebaut)
-  const ensureBuf = pdfBuffer || await buildParticipationPdf({
-    customer,
-    booking,
-    offer, // wichtig, damit Titel/Ort stimmen
-  });
+  const monthly = (typeof monthlyRaw === 'number' && Number.isFinite(monthlyRaw)) ? monthlyRaw : undefined;
 
+  const startDateObj = parseISOorDate(booking?.date);
+  const startDE      = fmtDE(startDateObj);
+
+  const firstMonth =
+      (typeof booking?.firstMonthAmount === 'number') ? booking.firstMonthAmount
+    : prorateForStart(startDateObj, monthly);
+
+  /* ---------- Rechnung-Metadaten (nur Nummer/Datum) ---------- */
+  const invoiceNo     = booking?.invoiceNumber || booking?.invoiceNo || '';
+  const invoiceDate   = booking?.invoiceDate || '';
+  const invoiceDateDE = invoiceDate ? fmtDE(new Date(invoiceDate)) : '';
+
+  /* ---------- Marken/Signatur ---------- */
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
   const signature = {
     signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
     name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
   };
 
+  /* ---------- Anzeige-Felder ---------- */
+  const parentSal = customer?.parent?.salutation || '';
+  const parentFn  = customer?.parent?.firstName  || booking?.firstName || '';
+  const parentLn  = customer?.parent?.lastName   || booking?.lastName  || '';
+  // "Herr/Frau Nachname Vorname"
+  const parentFullDisplay = [parentSal, [parentLn, parentFn].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+
+  const childFn  = customer?.child?.firstName || '';
+  const childLn  = customer?.child?.lastName  || '';
+  const childFull = [childFn, childLn].filter(Boolean).join(' ');
+
+  const street = customer?.address?.street  || '';
+  const house  = customer?.address?.houseNo || '';
+  const zip    = customer?.address?.zip     || '';
+  const city   = customer?.address?.city    || '';
+  const addressLine = [
+    [street, house].filter(Boolean).join(' ').trim(),
+    [zip, city].filter(Boolean).join(' ').trim(),
+  ].filter(Boolean).join(', ');
+
+  const parentEmail = customer?.parent?.email || booking?.email || '';
+  const parentPhone = customer?.parent?.phone || booking?.phone || '';
+
+  const course = booking?.offerTitle || booking?.offerType || offer?.title || 'Buchung';
+  const venue  = booking?.venue || offer?.location || '';
+
+  /* ---------- Tag + Uhrzeit robust zusammensetzen ---------- */
+  const weekdayDE = (() => {
+    if (!booking?.date) return '';
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(booking.date) ? new Date(`${booking.date}T00:00:00`) : new Date(booking.date);
+    return d && !Number.isNaN(d.getTime())
+      ? new Intl.DateTimeFormat('de-DE', { weekday: 'long' }).format(d) // "Dienstag"
+      : '';
+  })();
+
+  // 1) Formular-Felder (WP)
+  const formTag  = booking?.tag  || booking?.Tag || booking?.weekday || booking?.wpTag || '';
+  const formTime = booking?.zeit || booking?.time || booking?.uhrzeit || booking?.preferredTime || '';
+
+  // 2) Zeiten aus Offer extrahieren – robust
+  function findTimeRangeFromOffer(off, weekdayName) {
+    if (!off) return '';
+
+    const joinRange = (from, to) => {
+      const f = from ? String(from).trim() : '';
+      const t = to   ? String(to).trim()   : '';
+      return [f, t].filter(Boolean).join(' – ');
+    };
+
+    if (Array.isArray(off.days) && off.days.length) {
+      const norm = (v) => String(v || '').toLowerCase();
+      const weekdayNorm = norm(weekdayName);
+
+      // passendes Objekt nach Wochentag, sonst erstes
+      let cand = off.days.find(d =>
+        norm(d?.day) === weekdayNorm ||
+        norm(d?.weekday) === weekdayNorm ||
+        norm(d?.tag) === weekdayNorm
+      ) || off.days[0];
+
+      if (cand && typeof cand === 'object') {
+        const from =
+          cand.timeFrom ?? cand.from ?? cand.start ??
+          (cand.time && (cand.time.from ?? cand.timeStart));
+        const to =
+          cand.timeTo   ?? cand.to   ?? cand.end   ??
+          (cand.time && (cand.time.to ?? cand.timeEnd));
+
+        if (from || to) return joinRange(from, to);
+
+        // kombinierte Felder wie "time" / "zeit" / "uhrzeit"
+        const t = cand.time ?? cand.zeit ?? cand.uhrzeit;
+        if (t) return String(t).replace(/\s*-\s*/g, ' – ').trim();
+      }
+    }
+
+    // root-Fallback
+    const from = off.timeFrom ?? off.from ?? off.start;
+    const to   = off.timeTo   ?? off.to   ?? off.end;
+    if (from || to) return joinRange(from, to);
+
+    const t = off.time ?? off.zeit ?? off.uhrzeit;
+    return t ? String(t).replace(/\s*-\s*/g, ' – ').trim() : '';
+  }
+
+  const offerTime   = findTimeRangeFromOffer(offer, weekdayDE);
+  const tagDisplay  = formTag || weekdayDE || '';
+  const timeDisplay = formTime || offerTime || '';
+  const dayTimeLine = tagDisplay
+    ? (timeDisplay ? `${tagDisplay}: ${timeDisplay}` : tagDisplay)
+    : (timeDisplay || '');
+
+  /* ---------- Template-Context ---------- */
   const ctx = {
     brand: { ...brand, logoUrl },
-    greetingName: fullName(customer?.parent) || 'Kunde',
+
+    greetingName: [parentSal, parentFn, parentLn].filter(Boolean).join(' ') || 'Kunde',
+
     blocks: {
       locationTitle: 'Standort',
       contactTitle:  'Deine Kontaktdaten',
       bookingTitle:  'Deine Buchung',
       agentTitle:    'Dein Ansprechpartner',
       invoiceTitle:  'Die Rechnung',
-      invoiceNote:   'Bitte begleiche die Rechnung innerhalb von 14 Tagen.',
+      invoiceNote:   'Die Rechnung findest du als PDF im Anhang.',
     },
+
     location: {
-      club: (booking?.venue || offer?.location || ''),
-      address: [(booking?.venue || offer?.location || '')].filter(Boolean).join(', '),
+      club:    venue,
+      address: venue,
     },
+
     customer: {
-      address: [
-        customer?.address?.street && `${customer.address.street} ${customer.address.houseNo || ''}`.trim(),
-        customer?.address?.zip    && `${customer.address.zip} ${customer.address.city || ''}`.trim(),
-      ].filter(Boolean).join(' , '),
-      childFull:  `${customer?.child?.firstName || ''} ${customer?.child?.lastName || ''}`.trim(),
-      parentFull: fullName(customer?.parent),
-      email:      '', // E-Mail bewusst nicht ins PDF
+      parentFull: parentFullDisplay,
+      childFull:  childFull,        // wird aktuell im MJML nicht mehr separat gezeigt – schadet aber nicht
+      email:      parentEmail,
+      phone:      parentPhone,
+      address:    addressLine,
     },
+
     booking: {
-      offer:       booking?.offerTitle || booking?.offerType || offer?.title || 'Buchung',
-      bookingDate: booking?.date || '',
-      venue:       booking?.venue || offer?.location || '',
+      childFull:     childFull,      // für "… für Max Mustermann"
+      offer:         course,
+      bookingDate:   booking?.date || '',
+      bookingDateDE: startDE || '',
+      venue:         venue,
+      dayTime:       dayTimeLine,    // "Dienstag: 16:30 – 17:30" (oder nur "Dienstag")
+      timeDisplay:   timeDisplay,    // nur "16:30 – 17:30"
+
+      dayTimes:       tagDisplay,           // z.B. "Dienstag"
+
+       
     },
-    // >>> NEU: Preis-Block für MJML-Template (Strings formatiert)
+
+    // Preisübersicht (falls im MJML genutzt) + für PDF
     price: {
-      monthly:   (monthly != null)   ? eur(monthly, currency)   : '',
-      firstMonth:(firstMonth != null)? eur(firstMonth, currency): '',
-      currency,
-      startDate: booking?.date || '',
+      monthly:    (monthly    != null) ? eur(monthly)    : '',
+      firstMonth: (firstMonth != null) ? eur(firstMonth) : '',
+      currency: 'EUR',
+      startDate:  booking?.date || '',
+    },
+
+    // Rechnungsteil: KEINE Beträge in der Mail
+    invoice: {
+      number: invoiceNo || '',
+      date:   invoiceDateDE || invoiceDate || '',
     },
 
     signature,
     legal: {
       line: `${brand.company} · ${brand.addr1} · ${brand.addr2} · ${brand.email}`,
-      disclaimer:
-        'This e-mail may contain confidential and/or privileged information. If you are not the intended recipient, please notify the sender and destroy this e-mail.',
     },
   };
 
+  /* ---------- PDF (identisch zu Mail-Werten) ---------- */
+  const ensureBuf = pdfBuffer || await buildParticipationPdf({
+    customer,
+    booking,
+    offer,
+    invoiceNo,
+    invoiceDate,
+    monthlyAmount:    monthly,
+    firstMonthAmount: firstMonth,
+    venue,
+  });
+
+  /* ---------- Render & Send ---------- */
   const html = renderMjmlFile('templates/emails/participation.mjml', ctx);
   const attachments = [
     ...(logoAttachment ? [logoAttachment] : []),
     { filename: 'Teilnahmebestaetigung.pdf', content: ensureBuf },
   ];
+
+  console.log('[participation-email]', {
+    dayTime: dayTimeLine,
+    tagDisplay, timeDisplay, weekdayDE,
+    monthly, firstMonth, invoiceNo,
+  });
 
   await sendMail({ to, subject: 'Teilnahmebestätigung', text: '', html, attachments });
 }
@@ -329,49 +500,13 @@ async function sendParticipationEmail({ to, customer, booking, offer, pdfBuffer 
 
 
 
-/** Kündigungsbestätigung */
-async function sendCancellationEmail({ to, customer, booking, offer, date, reason, pdfBuffer }) {
-  if (!to) return;
 
-  const shaped = shapeCancellationData({ customer, booking, offer, date, reason });
 
-  const ensureBuf = pdfBuffer || await buildCancellationPdf({
-    customer: shaped.customer,
-    booking : shaped.booking,
-    date    : shaped.details.cancelDate,
-    reason  : shaped.details.reason,
-  });
 
-  const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
-  const signature = {
-    signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
-    name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
-  };
 
-  const ctx = {
-    brand: { ...brand, logoUrl },
-    greetingName: fullName(shaped.customer.parent) || 'Kunde',
-    headline: 'Kündigungsbestätigung',
-    infoLine: 'Hiermit bestätigen wir die Kündigung.',
-    booking: {
-      offer: shaped.booking.offerTitle || shaped.booking.offerType || '',
-    },
-    details: {
-      cancelDate: new Date(shaped.details.cancelDate || Date.now()).toLocaleDateString('de-DE'),
-      reason:     shaped.details.reason || '',
-    },
-    signature,
-    legal: { line: `${brand.company} · ${brand.addr1} · ${brand.addr2} · ${brand.email}` },
-  };
 
-  const html = renderMjmlFile('templates/emails/cancellation.mjml', ctx);
-  const attachments = [
-    ...(logoAttachment ? [logoAttachment] : []),
-    { filename: 'Kuendigungsbestaetigung.pdf', content: ensureBuf },
-  ];
 
-  await sendMail({ to, subject: 'Kündigungsbestätigung', text: '', html, attachments });
-}
+
 
 // ---- Termin bestätigt – E-Mail mit optionalem PDF-Anhang ----
 async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
@@ -425,7 +560,7 @@ async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
 async function sendStornoEmail({ to, customer, booking, offer, pdfBuffer, amount, currency = 'EUR' }) {
   if (!to) return;
 
-  // 1) Betrag robust bestimmen: amount (wenn numerisch) sonst offer.price
+  // 1) Betrag robust bestimmen
   const effectiveAmount = Number.isFinite(Number(amount))
     ? Number(amount)
     : (offer && typeof offer.price === 'number' ? offer.price : 0);
@@ -443,10 +578,7 @@ async function sendStornoEmail({ to, customer, booking, offer, pdfBuffer, amount
     shaped.booking.venue      = shaped.booking.venue      || offer.location || '';
   }
 
-  // --- Debug: sofort sehen, welcher Betrag final verwendet wird
-  console.log('[STORNO mailer]', {
-    amountIn: amount, offerPrice: offer?.price, effectiveAmount
-  });
+
 
   // 3) PDF rendern (mit effektivem Betrag)
   const ensureBuf = pdfBuffer || await buildStornoPdf({
@@ -464,30 +596,90 @@ async function sendStornoEmail({ to, customer, booking, offer, pdfBuffer, amount
     name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
   };
 
-  const ctx = {
-    brand: { ...brand, logoUrl },
-    greetingName: fullName(shaped.customer.parent) || 'Kunde',
-    headline: 'Storno-Rechnung',
-    note: 'Wir bestätigen die Stornierung. Die Storno-Rechnung findest du im Anhang.',
-    invoice: {
-      invoiceNo:   `STORNO-${String(shaped.booking._id || '').slice(-6).toUpperCase()}`,
-      invoiceDate: new Date(shaped.booking.cancelDate || Date.now()).toLocaleDateString('de-DE'),
-      offer:       shaped.booking.offerTitle || shaped.booking.offerType || '',
-      items:       [{ desc: 'Gutschrift', qty: 1, amount: eur(effectiveAmount, shaped.currency) }],
-      total:       eur(effectiveAmount, shaped.currency),
-    },
-    signature,
-    legal: { line: `${brand.company} · ${brand.addr1} · ${brand.addr2} · ${brand.email}` },
-  };
 
-  const html = renderMjmlFile('templates/emails/invoice.mjml', ctx);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// utils/mailer.js – sendStornoEmail(...)
+const stornoNo =
+  booking?.stornoNo ||
+  shaped.booking?.stornoNo ||
+  `STORNO-${String(shaped.booking._id || '').slice(-6).toUpperCase()}`;
+
+// Referenzrechnung (falls vorhanden)
+const refInvoiceNo =
+  shaped.booking.refInvoiceNo ||
+  shaped.booking.originalInvoiceNo ||
+  shaped.booking.invoiceNo ||
+  shaped.booking.invoiceNumber || '';
+
+const refInvoiceDate =
+  shaped.booking.refInvoiceDate ||
+  shaped.booking.originalInvoiceDate ||
+  shaped.booking.invoiceDate || '';
+
+const refInvoiceDateDE = refInvoiceDate
+  ? new Intl.DateTimeFormat('de-DE').format(new Date(refInvoiceDate))
+  : '';
+
+const ctx = {
+  brand: { ...brand, logoUrl },
+  greetingName: fullName(shaped.customer.parent) || 'Kunde',
+  headline: 'Storno-Rechnung',
+  note: 'Wir bestätigen die Stornierung. Die Storno-Rechnung findest du im Anhang.',
+  invoice: {
+    invoiceNo: stornoNo, // ← hier die *gleiche* Nummer wie im PDF verwenden
+    invoiceDate: new Date(shaped.booking.cancelDate || Date.now()).toLocaleDateString('de-DE'),
+    offer: shaped.booking.offerTitle || shaped.booking.offerType || '',
+    items: [{ desc: 'Storno', qty: 1, amount: eur(effectiveAmount, shaped.currency) }],
+    total: eur(effectiveAmount, shaped.currency),
+    refInvoiceNo,
+    refInvoiceDate: refInvoiceDateDE || refInvoiceDate,
+  },
+  signature,
+  legal: { line: `${brand.company} · ${brand.addr1} · ${brand.addr2} · ${brand.email}` },
+};
+
+
+
+
+
+
+ const html = renderMjmlFile('templates/emails/invoice.mjml', ctx);
   const attachments = [
     ...(logoAttachment ? [logoAttachment] : []),
     { filename: 'Storno-Rechnung.pdf', content: ensureBuf },
   ];
 
-  await sendMail({ to, subject: 'Storno-Rechnung', text: '', html, attachments });
+  await sendMail({ to, subject: 'Stornorechnung', text: '', html, attachments });
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -532,6 +724,123 @@ async function sendBookingConfirmationEmail({ to, booking, pdfBuffer }) {
 async function verifySmtp() {
   return getTransporter().verify();
 }
+
+
+
+
+
+
+
+
+
+
+// === Kündigungsbestätigung per E-Mail ===
+async function sendCancellationEmail({ to, customer, booking, offer, pdfBuffer }) {
+  if (!to) return;
+
+  // --- Referenzrechnung (Nr./Datum) robust bestimmen ---
+  const refInvoiceNo   = booking?.refInvoiceNo   || booking?.invoiceNumber || booking?.invoiceNo || '';
+  const refInvoiceDate = booking?.refInvoiceDate || booking?.invoiceDate   || '';
+
+  // --- Kündigungsdaten aus der Buchung ---
+  const cancelDate     = booking?.cancelDate || new Date();
+  const cancelReason   = booking?.cancelReason || '';
+  const cancellationNo = booking?.cancellationNo || booking?.cancellationNumber || '';
+
+  // --- PDF bauen (falls nicht mitgegeben) ---
+  const ensureBuf = pdfBuffer || await buildCancellationPdf({
+    customer,
+    booking,
+    offer,
+    date:            cancelDate,
+    reason:          cancelReason,
+    cancellationNo:  cancellationNo || undefined,
+    refInvoiceNo:    refInvoiceNo   || undefined,
+    refInvoiceDate:  refInvoiceDate || undefined,
+  });
+
+  // --- Brand & Logo für Inline/Anhang ---
+  const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
+
+  // --- E-Mail-Kontext für templates/emails/cancellation.mjml ---
+  const ctx = {
+    brand: { ...brand, logoUrl },
+    greetingName: fullName(customer?.parent) || 'Kunde',
+
+    blocks: {
+      locationTitle: 'Standort',
+      bookingTitle:  'Deine Buchung',
+      invoiceTitle:  'Referenzrechnung',
+      invoiceNote:   '',
+    },
+
+    location: {
+      club:    booking?.venue || offer?.location || '',
+      address: [booking?.venue || offer?.location || ''].filter(Boolean).join(', '),
+    },
+
+    customer: {
+      childFull:  `${customer?.child?.firstName || ''} ${customer?.child?.lastName || ''}`.trim(),
+      parentFull: fullName(customer?.parent),
+    },
+
+    booking: {
+      offer:       booking?.offerTitle || booking?.offerType || offer?.title || 'Buchung',
+      bookingDate: booking?.date || '',
+      venue:       booking?.venue || offer?.location || '',
+      cancelDate:  cancelDate,
+      cancelReason,
+    },
+
+    // Referenzrechnung in der Mail anzeigen (falls vorhanden)
+    invoice: {
+      number: refInvoiceNo || '',
+      date:   refInvoiceDate
+                ? new Intl.DateTimeFormat('de-DE').format(new Date(refInvoiceDate))
+                : '',
+    },
+
+    // Kündigungsnummer/Datum optional im Template nutzbar
+    cancellation: {
+      number: cancellationNo || '',
+      date:   cancelDate ? new Intl.DateTimeFormat('de-DE').format(new Date(cancelDate)) : '',
+    },
+
+    signature: {
+      signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
+      name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
+    },
+
+    legal: {
+      line: `${brand.company} · ${brand.addr1} · ${brand.addr2} · ${brand.email}`,
+      disclaimer:
+        'This e-mail may contain confidential and/or privileged information. If you are not the intended recipient, please notify the sender and destroy this e-mail.',
+    },
+  };
+
+  const html = renderMjmlFile('templates/emails/cancellation.mjml', ctx);
+
+  const attachments = [
+    ...(logoAttachment ? [logoAttachment] : []),
+    { filename: 'Kuendigungsbestaetigung.pdf', content: ensureBuf },
+  ];
+
+  await sendMail({
+    to,
+    subject: 'Kündigungsbestätigung',
+    text: '',
+    html,
+    attachments,
+  });
+}
+
+
+
+
+
+
+
+
 
 /* ================= Exports ================= */
 module.exports = {
