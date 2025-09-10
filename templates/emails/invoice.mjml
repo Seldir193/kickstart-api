@@ -1,23 +1,5 @@
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -34,7 +16,7 @@
 
   <mj-body background-color="#f5f7fb">
     <!-- Header: blau, mobil zentriert -->
-    <mj-section background-color="#2563eb" padding="12px 24px">
+    <mj-section background-color="#3e6294" padding="12px 24px">
       <mj-column width="140px" vertical-align="middle">
         <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0" />
       </mj-column>
@@ -67,6 +49,13 @@
         <mj-text padding="0 24px">
           {{#if invoice.invoiceNo}}<b>Rechnungsnr.:</b> {{invoice.invoiceNo}}<br/>{{/if}}
           {{#if invoice.invoiceDate}}<b>Rechnungsdatum:</b> {{invoice.invoiceDate}}<br/>{{/if}}
+
+{{!-- ▼ NEU: Referenz auf eine bestehende Rechnung, falls mitgegeben --}}
+  {{#if invoice.refInvoiceNo}}
+    <b>Zur Rechnung:</b> {{invoice.refInvoiceNo}}
+    {{#if invoice.refInvoiceDate}} vom {{invoice.refInvoiceDate}}{{/if}}<br/>
+  {{/if}}
+
           {{#if invoice.offer}}<b>Angebot:</b> {{invoice.offer}}{{/if}}
         </mj-text>
       </mj-column>
@@ -146,3 +135,18 @@
     </mj-section>
   </mj-body>
 </mjml>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
