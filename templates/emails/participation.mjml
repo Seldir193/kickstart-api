@@ -12,8 +12,8 @@
   </mj-head>
 
   <mj-body background-color="#f5f7fb">
-    <!-- Header: blau, mobil sauber gestapelt & zentriert -->
-    <mj-section background-color="#2563eb" padding="12px 24px">
+    <!-- Header (unverändert) -->
+    <mj-section background-color="#3e6294" padding="12px 24px">
       <mj-column width="140px" vertical-align="middle">
         <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0" />
       </mj-column>
@@ -30,86 +30,68 @@
     </mj-section>
 
     <!-- Greeting -->
-    <mj-section background-color="#ffffff" padding="12px 0 0">
+    <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
-        <mj-text font-size="16px" line-height="24px" padding="0 24px">Hallo {{greetingName}}.</mj-text>
-        <mj-spacer height="10px" />
-        <mj-text font-size="16px" line-height="24px" padding="0 24px">Vielen Dank für deine Buchung.</mj-text>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          Hallo {{greetingName}},
+        </mj-text>
+        <mj-spacer height="8px" />
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          vielen Dank für deine Anmeldung! Hier sind die wichtigsten Infos:
+        </mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Standort -->
+    <!-- Deine Buchung -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.locationTitle}}</mj-text>
-        <mj-spacer height="6px" />
-        <mj-text padding="0 24px">
-          {{#if location.club}}{{location.club}}<br/>{{/if}}
-          {{#if location.address}}{{location.address}}{{/if}}
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">
+          {{blocks.bookingTitle}} für {{#if booking.childFull}}{{booking.childFull}}{{/if}}
         </mj-text>
+        <mj-spacer height="6px" />
+       
+
+
+<mj-text padding="0 24px 6px">
+  {{#if booking.offer}}<b>Kurs:</b> {{booking.offer}}<br/>{{/if}}
+  
+   {{#if booking.dayTimes}}<b>Kurstag:</b> {{booking.dayTimes}}<br/>{{/if}}
+  {{#if booking.timeDisplay}}<b>Kurszeit:</b> {{booking.timeDisplay}}<br/>{{/if}}
+  {{#if booking.bookingDateDE}}<b>Start:</b> {{booking.bookingDateDE}}<br/>{{/if}}
+  {{#if booking.venue}}<b>Kursort:</b> {{booking.venue}}{{/if}}
+</mj-text>
+
+
+
       </mj-column>
     </mj-section>
 
     <!-- Kontaktdaten -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.contactTitle}}</mj-text>
-        <mj-spacer height="6px" />
-        <mj-text padding="0 24px">{{#if customer.address}}{{customer.address}}{{/if}}</mj-text>
-      </mj-column>
-    </mj-section>
-
-
-
-
-<!-- Buchung -->
-<mj-section background-color="#ffffff" padding="16px 0 0">
-  <mj-column>
-    <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.bookingTitle}}</mj-text>
-    <mj-spacer height="6px" />
-    <mj-text padding="0 24px 6px">
-      {{#if customer.childFull}}<b>{{customer.childFull}}</b> | {{/if}}{{booking.offer}}<br/>
-      {{#if booking.bookingDate}}<b>Start:</b> {{fmtDate booking.bookingDate}}<br/>{{/if}}
-      {{#if booking.venue}}<b>Ort:</b> {{booking.venue}}{{/if}}
-    </mj-text>
-
-    {{#if price.monthly}}
-      <mj-text font-size="16px" font-weight="700" padding="4px 24px 0">Preisübersicht</mj-text>
-
-<mj-text padding="0 24px 6px">
-  Monatlich: {{price.monthly}}<br/>
-  {{#if price.firstMonth}}Erster Monat (anteilig): {{price.firstMonth}}<br/>{{/if}}
-</mj-text>
-
-
-   
-    {{/if}}
-  </mj-column>
-</mj-section>
-
-
-
-
-
-
-
-
-    <!-- Rechnung -->
-    <mj-section background-color="#ffffff" padding="16px 0 0">
-      <mj-column>
-        <mj-text font-size="16px" font-weight="700" padding="0 24px">{{blocks.invoiceTitle}}</mj-text>
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">
+          {{blocks.contactTitle}}
+        </mj-text>
         <mj-spacer height="6px" />
         <mj-text padding="0 24px">
-          {{#if invoice.invoiceNo}}Rechnungsnr.: {{invoice.invoiceNo}}<br/>{{/if}}
-          {{#if invoice.invoiceDate}}Rechnungsdatum: {{invoice.invoiceDate}}<br/>{{/if}}
-          {{#if invoice.monthlyAmount}}Monatlich: {{invoice.monthlyAmount}}<br/>{{/if}}
-          {{#if invoice.firstMonthAmount}}Erster Monat: {{invoice.firstMonthAmount}}{{/if}}
+          {{#if customer.parentFull}}{{customer.parentFull}}<br/>{{/if}}
+          {{#if customer.address}}{{customer.address}}<br/>{{/if}}
+          {{#if customer.phone}}{{customer.phone}}<br/>{{/if}}
+          {{#if customer.email}}{{customer.email}}{{/if}}
         </mj-text>
-        <mj-text padding="6px 24px 0">{{blocks.invoiceNote}}</mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Signatur -->
+    <!-- Hinweis auf Rechnung -->
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text padding="0 24px">
+          Die Rechnung findest du im Anhang dieser E-Mail.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Signatur (unverändert) -->
     <mj-section background-color="#ffffff" padding="20px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
@@ -120,7 +102,7 @@
       </mj-column>
     </mj-section>
 
-    <!-- Social-Links nebeneinander -->
+    <!-- Social (unverändert inkl. TikTok-Link) -->
     <mj-section background-color="#ffffff" padding="8px 0 0">
       <mj-column>
         <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
@@ -132,25 +114,21 @@
       </mj-column>
     </mj-section>
 
-    <!-- Footer: grau, alles untereinander -->
+    <!-- Footer (unverändert) -->
     <mj-section background-color="#f1f5f9" padding="0 0 16px 0">
       <mj-column>
         <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="12px 24px 0">
           © 2025, {{brand.company}} – alle Rechte vorbehalten.
         </mj-text>
-
         <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
           {{brand.addr1}}<br/>{{brand.addr2}}
         </mj-text>
-
         <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
           Telefon: <a href="tel:+4917643203362" style="color:#0f172a; text-decoration:none;">0176 4320 3362</a>
         </mj-text>
-
         <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
           E-Mail: <a href="mailto:{{brand.email}}" style="color:#0f172a; text-decoration:none;">{{brand.email}}</a>
         </mj-text>
-
         <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 8px">
           Website: <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
         </mj-text>
@@ -158,14 +136,6 @@
     </mj-section>
   </mj-body>
 </mjml>
-
-
-
-
-
-
-
-
 
 
 
