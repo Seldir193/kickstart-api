@@ -45,4 +45,3 @@ const Offer = require('../models/Offer');
     process.exit(1);
   }
 })();
-
