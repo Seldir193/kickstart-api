@@ -24,7 +24,6 @@ const adminInvoices = require('./routes/adminInvoices');
 
 
 
-
 // SMTP health check
 const { verifySmtp }    = require('./utils/mailer');
 
