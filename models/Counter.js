@@ -1,9 +1,16 @@
+
+
+
+
 // models/Counter.js
+'use strict';
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const CounterSchema = new mongoose.Schema({
-  key: { type: String, unique: true }, // z.B. "invoice:FO:2025" oder "cancel:K:2024"
+const CounterSchema = new Schema({
+  _id: { type: String, required: true }, // z.B. "customer:<ownerId>" oder "invoice:AT:2025"
   seq: { type: Number, default: 0 },
-}, { timestamps: true });
+}, { versionKey: false });
 
-module.exports = mongoose.model('Counter', CounterSchema);
+module.exports = mongoose.models.Counter || mongoose.model('Counter', CounterSchema);
+
