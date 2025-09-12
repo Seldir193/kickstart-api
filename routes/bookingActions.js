@@ -1,14 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
 // routes/bookingActions.js
 const express = require('express');
 const mongoose = require('mongoose');
@@ -21,7 +11,22 @@ const { buildCancellationPdf, buildStornoPdf } = require('../utils/pdf');
 const { sendCancellationEmail, sendStornoEmail } = require('../utils/mailer');
 const { prorateForStart, nextPeriodStart, fmtAmount, normCurrency } = require('../utils/billing');
 
+
+// ... deine bestehenden requires
+const { buildParticipationPdfHTML, buildCancellationPdfHTML, buildStornoPdfHTML } = require('../utils/pdfHtml');
+
+
+
 const router = express.Router();
+
+
+
+
+
+
+
+
+
 
 /* -------- Provider/Owner helpers (Header: x-provider-id) -------- */
 function getProviderIdRaw(req) {
@@ -109,6 +114,7 @@ router.post('/:cid/bookings/:bid/cancel', async (req, res) => {
   }
 });
 
+
 /* ===================== STORNO ===================== */
 router.post('/:cid/bookings/:bid/storno', async (req, res) => {
   try {
@@ -169,6 +175,135 @@ router.post('/:cid/bookings/:bid/storno', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+/* ========= PARTICIPATION PDF ========= */
+router.get('/:cid/bookings/:bid/participation.pdf', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const ids = requireIds(req, res); if (!ids) return;
+
+    const customer = await Customer.findOne({ _id: ids.cid, owner });
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    const booking = customer.bookings.id(ids.bid);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+
+    const buf = await buildParticipationPdfHTML({
+      customer: customer.toObject ? customer.toObject() : customer,
+      booking : booking.toObject ? booking.toObject() : booking,
+      offer,
+      // optionale Felder aus Booking nutzen, falls vorhanden:
+      invoiceNo:   booking.invoiceNo || booking.invoiceNumber,
+      invoiceDate: booking.invoiceDate,
+      monthlyAmount: booking.priceMonthly ?? booking.monthlyAmount,
+      firstMonthAmount: booking.priceFirstMonth ?? booking.firstMonthAmount,
+      venue: booking.venue || booking.location,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="participation-${ids.bid}.pdf"`);
+    return res.status(200).send(Buffer.from(buf));
+  } catch (err) {
+    console.error('[participation.pdf] error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ========= CANCELLATION PDF ========= */
+router.get('/:cid/bookings/:bid/cancellation.pdf', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const ids = requireIds(req, res); if (!ids) return;
+
+    const customer = await Customer.findOne({ _id: ids.cid, owner });
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    const booking = customer.bookings.id(ids.bid);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+
+    const date   = req.query.date   ? new Date(String(req.query.date)) : (booking.cancelDate || booking.cancellationDate);
+    const reason = req.query.reason ? String(req.query.reason) : (booking.cancelReason || '');
+
+    const buf = await buildCancellationPdfHTML({
+      customer: customer.toObject ? customer.toObject() : customer,
+      booking : booking.toObject ? booking.toObject() : booking,
+      offer,
+      date,
+      reason,
+      cancellationNo: booking.cancellationNo || booking.cancellationNumber, // falls vorhanden
+      referenceInvoice: (booking.invoiceNo || booking.invoiceNumber) ? {
+        number: booking.invoiceNo || booking.invoiceNumber,
+        date:   booking.invoiceDate || null,
+      } : undefined,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="cancellation-${ids.bid}.pdf"`);
+    return res.status(200).send(Buffer.from(buf));
+  } catch (err) {
+    console.error('[cancellation.pdf] error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ========= STORNO PDF ========= */
+router.get('/:cid/bookings/:bid/storno.pdf', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const ids = requireIds(req, res); if (!ids) return;
+
+    const customer = await Customer.findOne({ _id: ids.cid, owner });
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    const booking = customer.bookings.id(ids.bid);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    const offer = booking.offerId ? await Offer.findById(booking.offerId).lean() : null;
+
+    const amount   = (req.query.amount != null) ? Number(req.query.amount) : (booking.stornoAmount ?? offer?.price ?? 0);
+    const currency = req.query.currency ? String(req.query.currency) : (booking.currency || 'EUR');
+
+    const buf = await buildStornoPdfHTML({
+      customer: customer.toObject ? customer.toObject() : customer,
+      booking : booking.toObject ? booking.toObject() : booking,
+      offer,
+      amount,
+      currency,
+      stornoNo: booking.stornoNo || booking.stornoNumber, // falls vorhanden
+      referenceInvoice: (booking.invoiceNo || booking.invoiceNumber) ? {
+        number: booking.invoiceNo || booking.invoiceNumber,
+        date:   booking.invoiceDate || null,
+      } : undefined,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="storno-${ids.bid}.pdf"`);
+    return res.status(200).send(Buffer.from(buf));
+  } catch (err) {
+    console.error('[storno.pdf] error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
+
+
+
 
 /* ============== INVOICES: computed list (limit/skip) ============== */
 router.get('/:cid/invoices', async (req, res) => {
@@ -319,4 +454,188 @@ router.get('/:cid/bookings/:bid/invoice.pdf', async (req, res) => {
   }
 });
 
+
+
+
+
+
+/* ========= GLOBAL DOCUMENT ALIAS ========= */
+// GET /api/admin/bookings/:bid/documents/:type
+router.get('/bookings/:bid/documents/:type', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const { bid, type } = req.params;
+
+    // Booking-ID prüfen
+    if (!mongoose.isValidObjectId(bid)) {
+      return res.status(400).json({ error: 'Invalid booking id' });
+    }
+
+    // Nur erlaubte Dokument-Typen
+    const ALLOWED = new Set(['participation', 'cancellation', 'storno']);
+    const t = String(type || '').toLowerCase();
+    if (!ALLOWED.has(t)) {
+      return res.status(400).json({ error: 'Invalid document type' });
+    }
+
+    // Customer finden, der dieses Booking enthält
+    const customer = await Customer.findOne({ owner, 'bookings._id': bid });
+    if (!customer) return res.status(404).json({ error: 'Customer not found for booking' });
+
+    // Redirect auf bestehenden Kunden-Pfad
+    const redirectPath = `/api/admin/customers/${customer._id}/bookings/${bid}/${t}.pdf`;
+    return res.redirect(302, redirectPath);
+  } catch (err) {
+    console.error('[alias-documents] error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+/* ========== PER-CUSTOMER DOCUMENT LIST ==========
+   GET /api/admin/customers/:cid/documents?page=&limit=&type=&from=&to=&q=&sort=
+*/
+router.get('/:cid/documents', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const cid = String(req.params.cid || '').trim();
+    if (!mongoose.isValidObjectId(cid)) {
+      return res.status(400).json({ ok:false, error:'Invalid customer id' });
+    }
+
+    // Query-Parameter
+    const page  = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 20))); // Client überschreibt; s.u.
+    const types = String(req.query.type || 'participation,cancellation,storno')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const from  = req.query.from ? new Date(String(req.query.from)) : null;
+    const to    = req.query.to   ? new Date(String(req.query.to))   : null;
+    const q     = String(req.query.q || '').toLowerCase();
+    const sort  = String(req.query.sort || 'issuedAt:desc'); // issuedAt:asc|desc
+
+    const customer = await Customer.findOne({ _id: cid, owner }).lean();
+    if (!customer) return res.status(404).json({ ok:false, error:'Customer not found' });
+
+    const items = [];
+
+    for (const b of (customer.bookings || [])) {
+      if (!b?._id) continue;
+      const bid = String(b._id);
+      const offerTitle = b.offerTitle || b.offerType || b.offer || '-';
+
+      // participation: immer verfügbar
+      if (types.includes('participation')) {
+        items.push({
+          id: `doc:${bid}:participation`,
+          bookingId: bid,
+          type: 'participation',
+          title: `${offerTitle} – Teilnahmebestätigung`,
+          issuedAt: (b.date || b.createdAt || new Date()),
+          href: `/api/admin/customers/${customer._id}/bookings/${bid}/participation.pdf`,
+          offerTitle,
+          offerType: b.offerType || '',
+        });
+      }
+
+      // cancellation: nur wenn storniert / Datum vorhanden
+      const isCancelled = (b.status === 'cancelled' || b.cancelDate || b.cancellationDate);
+      if (types.includes('cancellation') && isCancelled) {
+        items.push({
+          id: `doc:${bid}:cancellation`,
+          bookingId: bid,
+          type: 'cancellation',
+          title: `${offerTitle} – Kündigungsbestätigung`,
+          issuedAt: (b.cancelDate || b.cancellationDate || b.updatedAt || new Date()),
+          href: `/api/admin/customers/${customer._id}/bookings/${bid}/cancellation.pdf`,
+          offerTitle,
+          offerType: b.offerType || '',
+        });
+      }
+
+      // storno: wenn storno-Hinweise vorhanden
+      const hasStorno =
+        b.stornoNo ||
+        (typeof b.stornoAmount === 'number') ||
+        String(b.cancelReason || '').toLowerCase().includes('storno');
+      if (types.includes('storno') && hasStorno) {
+        items.push({
+          id: `doc:${bid}:storno`,
+          bookingId: bid,
+          type: 'storno',
+          title: `${offerTitle} – Stornorechnung`,
+          issuedAt: (b.cancelDate || b.updatedAt || new Date()),
+          href: `/api/admin/customers/${customer._id}/bookings/${bid}/storno.pdf`,
+          offerTitle,
+          offerType: b.offerType || '',
+        });
+      }
+    }
+
+    // Text-/Datumsfilter
+    const filtered = items.filter(it => {
+      if (q) {
+        const hay = `${it.title} ${it.offerTitle} ${it.type}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (from) {
+        const d = new Date(it.issuedAt);
+        if (isFinite(+from) && isFinite(+d) && d < from) return false;
+      }
+      if (to) {
+        const d = new Date(it.issuedAt);
+        if (isFinite(+to) && isFinite(+d) && d > to) return false;
+      }
+      return true;
+    });
+
+    // Sortierung
+    const [field, dir] = sort.split(':');
+    if (field === 'issuedAt') {
+      filtered.sort((a, b) => {
+        const av = a.issuedAt ? new Date(a.issuedAt).getTime() : 0;
+        const bv = b.issuedAt ? new Date(b.issuedAt).getTime() : 0;
+        return (dir === 'asc') ? (av - bv) : (bv - av);
+      });
+    }
+
+    // Pagination
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const end   = start + limit;
+    const pageItems = filtered.slice(start, end);
+
+    return res.json({ ok:true, items: pageItems, total, page, limit });
+  } catch (err) {
+    console.error('[customers/:cid/documents] error:', err);
+    return res.status(500).json({ ok:false, error:'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 module.exports = router;
+
+
+
+
