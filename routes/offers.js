@@ -99,15 +99,14 @@ function validateOfferBody(b) {
 
 /* ===================== Routes ===================== */
 
-/**
- * GET /api/offers
- * - Admin (mit X-Provider-Id): nur eigene Offers (kein onlineActive-Filter)
- * - Public (ohne Header): nur onlineActive=true
- * Query: ?type=&location=&q=&page=&limit=
- */
+
+
+
+
+// GET /api/offers
 router.get('/', async (req, res) => {
   try {
-    const { type, location, q, page = 1, limit = 10 } = req.query;
+    const { type, location, q, page = 1, limit = 10, category, sub_type, legacy_type } = req.query;
 
     const pidRaw = getProviderIdRaw(req);
     const filter = {};
@@ -119,8 +118,11 @@ router.get('/', async (req, res) => {
       filter.onlineActive = true;
     }
 
-    if (type) filter.type = String(type);
-    if (location) filter.location = String(location);
+    if (type)        filter.type        = String(type);
+    if (legacy_type) filter.legacy_type = String(legacy_type);
+    if (category)    filter.category    = String(category);
+    if (sub_type)    filter.sub_type    = String(sub_type);
+    if (location)    filter.location    = String(location);
 
     if (q && String(q).trim().length >= 2) {
       const needle = String(q).trim();
@@ -129,6 +131,8 @@ router.get('/', async (req, res) => {
         { info:     { $regex: needle, $options: 'i' } },
         { location: { $regex: needle, $options: 'i' } },
         { type:     { $regex: needle, $options: 'i' } },
+        { sub_type: { $regex: needle, $options: 'i' } },
+        { category: { $regex: needle, $options: 'i' } },
       ];
     }
 
@@ -146,6 +150,7 @@ router.get('/', async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 /**
  * GET /api/offers/:id
@@ -202,6 +207,10 @@ router.post('/', async (req, res) => {
       coachName:  b.coachName ? String(b.coachName).trim() : '',
       coachEmail: b.coachEmail ? String(b.coachEmail).trim() : '',
       coachImage: b.coachImage ? String(b.coachImage).trim() : '',
+
+       category:    b.category ? String(b.category).trim() : '',
+      sub_type:    b.sub_type ? String(b.sub_type).trim() : '',
+      legacy_type: b.legacy_type ? String(b.legacy_type).trim() : b.type,
     });
 
     return res.status(201).json(doc);
@@ -243,6 +252,10 @@ router.put('/:id', async (req, res) => {
       coachName:  b.coachName ? String(b.coachName).trim() : '',
       coachEmail: b.coachEmail ? String(b.coachEmail).trim() : '',
       coachImage: b.coachImage ? String(b.coachImage).trim() : '',
+
+          category:    b.category ? String(b.category).trim() : '',
+      sub_type:    b.sub_type ? String(b.sub_type).trim() : '',
+      legacy_type: b.legacy_type ? String(b.legacy_type).trim() : b.type
     };
 
     const doc = await Offer.findOneAndUpdate(
