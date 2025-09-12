@@ -15,7 +15,14 @@ const customersRouter   = require('./routes/customers');   // you will provide
 
 // NEW: actions router for cancel/storno/invoices
 const bookingActions    = require('./routes/bookingActions'); // create from our earlier message
- 
+
+
+
+
+
+const adminInvoices = require('./routes/adminInvoices');
+
+
 
 
 // SMTP health check
@@ -88,6 +95,9 @@ mongoose.connect(process.env.MONGO_URI)
     // /api/admin/customers/:cid/bookings/:bid/storno
     // /api/admin/customers/:cid/invoices
     app.use('/api/admin/customers', bookingActions);
+
+
+    app.use('/api/admin/invoices', adminInvoices);
 
     // Basic 404 for /api
     app.use('/api', (_req, res) => res.status(404).json({ error: 'Not Found' }));
