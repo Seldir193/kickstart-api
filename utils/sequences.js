@@ -1,13 +1,22 @@
 
+
+
+
+
+
+
+
+
+
 // utils/sequences.js
 const Counter = require('../models/Counter');
 
 async function nextSequence(key) {
   const doc = await Counter.findOneAndUpdate(
-    { key },
+    { _id: String(key) },                    // ✅ _id statt key
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
-  );
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();                                  // optional: plain object
   return doc.seq; // 1, 2, 3, ...
 }
 
@@ -66,8 +75,7 @@ module.exports = {
   nextSequence,
   yearFrom,
   typeCodeFromOfferType,
-  formatNumber,        // bleibt exportiert (Kompatibilität)
-  // neu:
+  formatNumber,
   formatInvoiceShort,
   formatCancellationNo,
   formatStornoNo,
