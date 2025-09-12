@@ -728,14 +728,14 @@ router.post('/:id/bookings/:bid/documents/cancellation', async (req, res) => {
     const date = booking.cancelDate || new Date();
     const reason = booking.cancelReason || '';
 
-  
-    if (!booking.invoiceNumber && !booking.invoiceNo) {
+      if (!booking.invoiceNumber && !booking.invoiceNo) {
   const code = (offer?.code || typeCodeFromOfferType(offer?.type || '') || 'INV').toUpperCase();
   const seq  = await nextSequence(`invoice:${code}:${yearFrom(booking.date || new Date())}`);
   booking.invoiceNumber = formatInvoiceShort(code, seq, booking.date || new Date());
   booking.invoiceDate   = booking.date || new Date();
   console.log('[DOCS/CANCELLATION] fallback invoice set (not saved):', booking.invoiceNumber, booking.invoiceDate);
 }
+
 
     const referenceInvoice = {
   number: booking.invoiceNumber || booking.invoiceNo || '',
