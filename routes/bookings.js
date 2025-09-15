@@ -1,4 +1,5 @@
 
+
 // routes/bookings.js
 'use strict';
 
@@ -83,6 +84,9 @@ const normalizeStatus = (s) => (s === 'canceled' ? 'cancelled' : s);
 
 /* ------------------------------ Routes ------------------------------ */
 
+
+
+
 /** PUBLIC/ADMIN: Create booking (sendet Eingangsbestätigung via MJML) */
 router.post('/', async (req, res) => {
   try {
@@ -160,6 +164,13 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
 
 /** ADMIN: List bookings (scoped) */
 router.get('/', adminAuth, async (req, res) => {
@@ -364,6 +375,14 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
 
 
 module.exports = router;
+
+
+
+
+
+
+
+
 
 
 
