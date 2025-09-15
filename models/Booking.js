@@ -97,3 +97,16 @@ BookingSchema.index({ owner: 1, stornoNumber: 1 },      { unique: true, sparse: 
 
 
 module.exports = models.Booking || model('Booking', BookingSchema);
+
+
+
+
+
+
+
+
+
+
+
+
+
