@@ -53,7 +53,7 @@
 
 
 <mj-text padding="0 24px 6px">
-  {{#if booking.offer}}<b>Kurs:</b> {{booking.offer}}<br/>{{/if}}
+  {{#if booking.offer}}<b>Kurs:</b> {{courseOnly booking.offer}}<br/>{{/if}}
   
    {{#if booking.dayTimes}}<b>Kurstag:</b> {{booking.dayTimes}}<br/>{{/if}}
   {{#if booking.timeDisplay}}<b>Kurszeit:</b> {{booking.timeDisplay}}<br/>{{/if}}
@@ -73,12 +73,22 @@
           {{blocks.contactTitle}}
         </mj-text>
         <mj-spacer height="6px" />
+       
+
         <mj-text padding="0 24px">
-          {{#if customer.parentFull}}{{customer.parentFull}}<br/>{{/if}}
-          {{#if customer.address}}{{customer.address}}<br/>{{/if}}
-          {{#if customer.phone}}{{customer.phone}}<br/>{{/if}}
-          {{#if customer.email}}{{customer.email}}{{/if}}
-        </mj-text>
+  {{#if customer.parentFull}}{{customer.parentFull}}<br/>{{/if}}
+
+  {{#if customer.addressLine1}}
+    {{customer.addressLine1}}<br/>
+    {{#if customer.addressLine2}}{{customer.addressLine2}}<br/>{{/if}}
+  {{else}}
+    {{#if customer.address}}{{customer.address}}<br/>{{/if}}
+  {{/if}}
+
+  {{#if customer.phone}}{{customer.phone}}<br/>{{/if}}
+  {{#if customer.email}}{{customer.email}}{{/if}}
+</mj-text>
+
       </mj-column>
     </mj-section>
 
