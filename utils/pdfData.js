@@ -8,6 +8,28 @@ function toISODate(d) {
 }
 
 
+
+function sanitizeCourseTitle(raw) {
+  if (!raw) return '';
+  let s = String(raw).trim();
+
+  // an erster Trennmarke (• | — – |) mit/ohne Leerzeichen sauber abschneiden
+  s = s.split(/\s*(?:[•|]|—|–)\s*/)[0];
+
+  // hinter Komma + Zahl (Hausnr/PLZ) abschneiden
+  const commaDigit = s.search(/,\s*\d/);
+  if (commaDigit > 0) s = s.slice(0, commaDigit);
+
+  // hinter " - " + Zahl ebenfalls abschneiden (falls Adresse mit Bindestrich eingeleitet wird)
+  const dashAddr = s.search(/\s-\s*\d/);
+  if (dashAddr > 0) s = s.slice(0, dashAddr);
+
+  return s.trim();
+}
+
+
+
+
 /** Rechnungsnummern vereinheitlichen, z. B. "KIGA-25-0044" */
 function normalizeInvoiceNo(v) {
   if (!v) return '';
@@ -100,8 +122,11 @@ function shapeBooking(booking = {}, offer = {}) {
     _id       : booking._id || '',
 
     // Angebot: primär Offer, sekundär Snapshot im Booking
-    offerTitle: (offer.title    || booking.offerTitle || ''),
-    offerType : (offer.type     || booking.offerType  || ''),
+   // offerTitle: (offer.title    || booking.offerTitle || ''),
+    offerTitle: (offer.title || offer.sub_type || booking.offerTitle || booking.offerType || ''),
+
+    //offerType : (offer.type     || booking.offerType  || ''),
+    offerType : (offer.sub_type || booking.offerType  || offer.type || ''),
     venue     : (offer.location || booking.venue      || booking.offerLocation || ''),
 
     // Kerndaten
@@ -109,6 +134,7 @@ function shapeBooking(booking = {}, offer = {}) {
     status    : booking.status || '',
     cancelDate  : toISODate(booking.cancelDate || booking.cancellationDate || booking.canceledAt || ''),
     cancelReason: booking.cancelReason || booking.cancellationReason || '',
+    endDate     : toISODate(booking.endDate || ''),
 
     // Sonstiges
     level     : booking.level || '',
@@ -150,25 +176,122 @@ function shapeStornoData({ customer, booking, offer, amount, currency = 'EUR' })
 }
 
 /** Kündigung */
-function shapeCancellationData({ customer, booking, offer, date, reason }) {
+
+
+// utils/pdfData.js
+function shapeCancellationData({ customer, booking, offer, date, endDate, reason }) {
   const shapedBooking = shapeBooking(booking, offer);
+
+  // Eingang der Kündigung (vom …)
+  const requestISO =
+    toISODate(booking?.requestDate) ||
+    toISODate(booking?.cancelRequestDate) ||
+    toISODate(date) ||                       // Param 'date' = Eingang vom Controller
+    shapedBooking.cancelDate;                // Fallback: gespeichertes cancelDate
+
+  // Beendigungsdatum (zum …) – erst echte Werte, sonst später Auto-Fallback
+  let endISO =
+    toISODate(endDate) ||
+    toISODate(booking?.endDate) ||
+    toISODate(booking?.cancelEndDate) ||
+    toISODate(booking?.cancellationEndDate) ||
+    '';
+
+  // 🔁 Auto-Fallback: wenn kein Enddatum vorhanden → +1 Monat ab requestISO/cancelDate
+  if (!endISO) {
+    const baseISO = requestISO || shapedBooking.cancelDate || '';
+    if (baseISO) {
+      const d = new Date(`${baseISO}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        const day = d.getDate();
+
+        // Zielmonat +1:
+        const targetY = (m === 11) ? (y + 1) : y;
+        const targetM = (m + 1) % 12;
+
+        // letzter Tag des Zielmonats
+        const lastDayTargetMonth = new Date(targetY, targetM + 1, 0).getDate();
+        const targetDay = Math.min(day, lastDayTargetMonth);
+
+        const end = new Date(targetY, targetM, targetDay);
+        endISO = toISODate(end);
+      }
+    }
+  }
+
   return {
     customer: shapeCustomer(customer, booking),
     booking : shapedBooking,
     details : {
-      cancelDate: toISODate(date) || shapedBooking.cancelDate,
-      reason    : (reason || shapedBooking.cancelReason || ''),
+      requestDate: requestISO,
+      cancelDate : toISODate(date) || shapedBooking.cancelDate,
+      endDate    : endISO,
+      reason     : (reason || shapedBooking.cancelReason || ''),
     },
   };
 }
 
-/** Teilnahme */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function shapeParticipationData({ customer, booking, offer }) {
+  const shapedCustomer = shapeCustomer(customer, booking);
+  const shapedBooking  = shapeBooking(booking, offer);
+
+  // 1) Kursname: nimm booking.offer, aber säubere ihn von Adressanteilen
+  const cleanOffer =
+    sanitizeCourseTitle(
+      booking?.offer ||
+      shapedBooking.offerTitle ||
+      shapedBooking.offerType ||
+      offer?.title ||
+      ''
+    );
+
+  // 2) Kurstag/Zeit aus deinen vorhandenen Feldern übernehmen (fallbacks optional)
+  const dayTimes     = booking?.dayTimes || booking?.kurstag || booking?.weekday || '';
+  //const timeDisplay  = booking?.timeDisplay || booking?.kurszeit || booking?.uhrzeit || ''; 
+
+  // in shapeParticipationData(...)
+const timeDisplay =
+  booking?.timeDisplay ||
+  booking?.kurszeit ||
+  booking?.time ||      // ← dies noch ergänzen
+  booking?.uhrzeit ||
+  '';
+
+
   return {
-    customer: shapeCustomer(customer, booking),
-    booking : shapeBooking(booking, offer),
+    customer: shapedCustomer,
+    booking : {
+      ...shapedBooking,
+      // wichtig: diese 3 Felder fürs Template bereitstellen
+      offer: cleanOffer,          // ← nur Kursname, ohne Adresse
+      dayTimes,                   // ← "Sonntag"
+      timeDisplay,                // ← "15:00 bis 16:00"
+    },
   };
 }
+
+
+
+
+
 
 module.exports = {
   shapeStornoData,
