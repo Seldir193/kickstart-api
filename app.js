@@ -101,6 +101,8 @@ mongoose.set('strictQuery', true);
     app.use('/api/admin/auth',         adminUsersRouter);
     app.use('/api/customers',          customersRouter);
     app.use('/api/places',             placesRouter);
+    app.use('/api/admin/datev', require('./routes/datev'));
+
 
     // Admin Actions (cancel/storno/invoices auf Customer/Booking-Ebene)
     app.use('/api/admin/customers',    bookingActions);
