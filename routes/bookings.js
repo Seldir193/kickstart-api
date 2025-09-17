@@ -26,6 +26,15 @@ const {
 const router = express.Router();
 
 /* ----------------------------- Helpers ------------------------------ */
+
+function isOneOff(offer) {
+  if (!offer) return false;
+  if (String(offer.type) === 'PersonalTraining') return true;
+  if (String(offer.sub_type || '').toLowerCase() === 'powertraining') return true;
+  return false;
+}
+
+
 function validate(payload) {
   const errors = {};
   if (!payload.firstName?.trim()) errors.firstName = 'Required';
@@ -132,10 +141,17 @@ router.post('/', async (req, res) => {
     }
 
     // Pro-rata berechnen (falls Preis am Angebot)
-    const monthlyPrice = typeof offer.price === 'number' ? offer.price : null;
-    const pro = (monthlyPrice != null)
-      ? prorateForStart(req.body.date, monthlyPrice)
-      : { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: null };
+
+
+
+   const isWeekly =
+   offer?.category === 'Weekly' ||
+   offer?.type === 'Foerdertraining' ||
+   offer?.type === 'Kindergarten';
+ const monthlyPrice = (isWeekly && typeof offer.price === 'number') ? offer.price : null;
+ const pro = (isWeekly && monthlyPrice != null)
+   ? prorateForStart(req.body.date, monthlyPrice)
+   : { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: null };
 
     const created = await Booking.create({
       owner:   offer.owner,

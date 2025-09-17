@@ -50,10 +50,13 @@ const OfferSchema = new Schema(
  * Pre-save: ensure title & legacy_type are set.
  */
 OfferSchema.pre('save', function (next) {
-  if (!this.title) {
-    const parts = [this.type, this.location].filter(Boolean);
-    this.title = parts.join(' • ');
-  }
+ 
+
+   if (!this.title) {
+   const display = (this.sub_type && this.sub_type.trim()) ? this.sub_type.trim() : this.type;
+   const parts = [display, this.location].filter(Boolean);
+   this.title = parts.join(' • ');
+ }
   if (!this.legacy_type && this.type) {
     this.legacy_type = this.type;
   }
