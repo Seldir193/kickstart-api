@@ -5,110 +5,102 @@
   <title>Kündigungsbestätigung – {{brand.company}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
-
-  <!-- Harte Overrides nur für dieses Dokument -->
-  <style>
-    /* Überschrift tiefer setzen (übersteuert .subject aus _base.css) */
-    .subject.subject-cancel { margin: 8mm 0 3mm !important; }
-
-    /* die 4 Zeilen dicht unter der Überschrift */
-    .facts.facts-cancel { margin-top: 2mm !important; }
-
-    /* Textblöcke: erst Bedauern, dann mit Abstand die Bestätigung */
-    .intro.intro-regret { margin-top: 4mm !important; margin-bottom: 0 !important; }
-    .intro.intro-confirmation { margin-top: 3mm !important; }
-
-    /* (optional) Brand-Zeile etwas näher an Adresse lassen */
-    .brand-line { margin: 2mm 0 1.2mm !important; }
-  </style>
 </head>
 <body>
 <main class="doc">
 
-  <!-- Topband ohne Mail/Website (Logo rechts im Balken) -->
+  <!-- Kopfband -->
   <div class="topband">
     <span class="claim">{{brand.company}}</span>
-    <span class="right"></span>
     {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
   </div>
 
-  <!-- Kleine Zeile nah an der Adresse -->
-  <div class="brand-line">
-    {{brand.company}} | {{brand.addr2}} | {{brand.addr1}}
-  </div>
-
-  <!-- Empfängeradresse -->
+  <!-- Empfängeradresse (Anrede über dem Namen) -->
   <div class="addr">
-{{fullName customer.parent}}
-{{#if customer.address.street}}{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}{{/if}}
-{{#if customer.address.zip}}{{customer.address.zip}}{{/if}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
+    {{#if customer.parent.salutation}}<span class="line">{{customer.parent.salutation}}</span>{{/if}}
+    <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
+    {{#if customer.address.street}}<span class="line">{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}</span>{{/if}}
+    {{#if customer.address.zip}}<span class="line">{{customer.address.zip}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}</span>{{/if}}
   </div>
 
-  <!-- Überschrift (mit eigener Klasse) -->
-  <div class="subject subject-cancel">Kündigungsbestätigung</div>
+  <!-- Titel -->
+  <h1 class="subject subject-cancel">Kündigungsbestätigung</h1>
 
-  <!-- Direkt die vier Zeilen -->
+  <!-- Kernangaben -->
   <div class="facts facts-cancel">
-    {{#if booking.cancellationNo}}
-      <div class="row"><span class="k">Kündigungs-Nr.:</span> <span class="v">{{booking.cancellationNo}}</span></div>
-    {{/if}}
+    {{#if booking.cancellationNo}}<div class="row"><span class="k">Kündigungs-Nr.:</span><span class="v">{{booking.cancellationNo}}</span></div>{{/if}}
 
     {{#if booking.refInvoiceNo}}
       <div class="row">
-        <span class="k">zur Rechnung:</span>
+        <span class="k">Referenzrechnung:</span>
         <span class="v">
           {{booking.refInvoiceNo}}
-          {{#if booking.refInvoiceDateDE}} vom {{booking.refInvoiceDateDE}}{{/if}}
+          {{#if booking.refInvoiceDate}} vom {{fmtDate booking.refInvoiceDate}}{{/if}}
+          {{#if booking.refInvoiceDateDE}} ({{booking.refInvoiceDateDE}}){{/if}}
         </span>
       </div>
     {{/if}}
 
-    <div class="row"><span class="k">Kunden-Nr.:</span> <span class="v">{{customer.userId}}</span></div>
-    <div class="row"><span class="k">Datum:</span> <span class="v">{{fmtDate booking.cancelDate}}</span></div>
+    {{#if customer.userId}}<div class="row"><span class="k">Kunden-Nr.:</span><span class="v">{{customer.userId}}</span></div>{{/if}}
+    <div class="row"><span class="k">Datum:</span><span class="v">{{fmtDate details.cancelDate}}</span></div>
   </div>
 
-  <!-- Zweiteiliger Text: erst Bedauern, dann Bestätigung mit zusätzlichem Abstand -->
   <div class="intro intro-regret">
     Wir bedauern, dass Sie unser Angebot
     <strong>
-      {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}
-        {{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}
+      {{#if booking.offerTitle}}
+        {{courseOnly booking.offerTitle}}
+      {{else if booking.offerType}}
+        {{courseOnly booking.offerType}}
+      {{else}}
+        {{courseOnly booking.offer}}
       {{/if}}
-    </strong><br/>
-    am Veranstaltungsort <strong>{{booking.venue}}</strong> nicht mehr nutzen möchten.
+    </strong>
+    {{#if booking.venue}} am Veranstaltungsort <strong>{{booking.venue}}</strong>{{/if}}<br/>
+    nicht mehr nutzen möchten.
   </div>
 
   <div class="intro intro-confirmation">
     Hiermit bestätigen wir den Erhalt Ihrer Kündigung<br/>
-    vom <strong>{{#if details.requestDate}}{{fmtDate details.requestDate}}{{else}}{{fmtDate booking.cancelDate}}{{/if}}</strong>{{#if details.endDate}} zum <strong>{{fmtDate details.endDate}}</strong>{{/if}}
+    vom&nbsp;<strong>{{#if details.requestDate}}{{fmtDate details.requestDate}}{{else}}{{fmtDate details.cancelDate}}{{/if}}</strong>
+    {{#if details.endDate}}&nbsp;zum&nbsp;<strong>{{fmtDate details.endDate}}</strong>{{/if}}
     für <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong>.
   </div>
 
+  {{#if details.reason}}
+    <div class="section-title">Grund</div>
+    <div class="notes"><p>{{details.reason}}</p></div>
+  {{/if}}
+
+  <!-- Footer -->
   <div class="footer-spacer"></div>
-
-  
-<section class="footer">
-  <div class="foot-inner">
-    <div class="footer-line">
-      <span class="footer-item">{{brand.company}} • {{brand.addr1}} • {{brand.addr2}}</span>
-      <span class="sep">•</span>
-      <a class="footer-item" href="mailto:{{brand.email}}">{{brand.email}}</a>
-      <a class="footer-item" href="{{brand.website}}">
-        {{#if brand.websiteShort}}{{brand.websiteShort}}{{else}}{{brand.website}}{{/if}}
-      </a>
-      <span class="sep">•</span>
-      <span class="footer-item">IBAN: {{brand.iban}}</span>
-      <span class="sep">•</span>
-      <span class="footer-item">BIC: {{brand.bic}}</span>
-    </div>
-  </div>
-</section>
-
+  <footer class="footer">
+    <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
+      <tr>
+        <td class="footer-col brand">
+          <strong>Münchner Fussball Schule NRW</strong><br/>
+          Hochfelder Straße 33<br/>
+          47226 Duisburg<br/>
+          Deutschland
+        </td>
+        <td class="footer-col meta">
+          <span class="k">Inhaber:</span> <span class="v">Selcuk Kocyigit</span><br/>
+          <span class="k">Tel.:</span> <span class="v">0176-43203362</span><br/>
+          <a href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br/>
+          <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
+        </td>
+        <td class="footer-col bank">
+          <span class="k">Bank:</span> <span class="v">Commerzbank</span><br/>
+          <span class="k">IBAN:</span> <span class="v nowrap">DE13350400380595090200</span><br/>
+          <span class="k">BIC:</span> <span class="v nowrap">COBADEFFXXX</span>
+        </td>
+      </tr>
+    </table>
+  </footer>
 
 </main>
 </body>
 </html>
-
 
 
 
