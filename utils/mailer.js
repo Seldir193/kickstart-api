@@ -133,7 +133,9 @@ async function sendBookingAckEmail({ to, offer, booking, pro }) {
     title: 'Eingangsbestätigung deiner Buchungsanfrage',
     greetingName: booking.firstName || 'Sportler',
     summary: {
-      offer: offer?.title || `${offer?.type ?? ''} ${offer?.location ? '• ' + offer.location : ''}`.trim(),
+     // offer: offer?.title || `${offer?.type ?? ''} ${offer?.location ? '• ' + offer.location : ''}`.trim(),
+     //offer: offer?.title || `${offer?.sub_type ?? offer?.type ?? ''}${offer?.location ? ' • ' + offer.location : ''}`.trim(),
+     offer: offer?.title || `${(offer?.sub_type || offer?.type || '')}${offer?.location ? ' • ' + offer.location : ''}`,
       date: dateDE,
       //date: booking.date,
       level: booking.level,
@@ -278,20 +280,30 @@ async function sendParticipationEmail({ to, customer, booking, offer, pdfBuffer 
   }
 
   /* ---------- Preise (Booking-Overrides > Offer) ---------- */
-  const monthlyRaw =
-      (typeof booking?.monthlyAmount === 'number') ? booking.monthlyAmount
-    : (typeof booking?.priceMonthly  === 'number') ? booking.priceMonthly
-    : (typeof offer?.price           === 'number') ? offer.price
-    : undefined;
 
+
+const isWeekly =
+   offer?.category === 'Weekly' ||
+   offer?.type === 'Foerdertraining' ||
+   offer?.type === 'Kindergarten';
+
+ const monthlyRaw = isWeekly
+   ? ((typeof booking?.monthlyAmount === 'number') ? booking.monthlyAmount
+      : (typeof booking?.priceMonthly  === 'number') ? booking.priceMonthly
+      : (typeof offer?.price           === 'number') ? offer.price
+      : undefined)
+   : undefined;
   const monthly = (typeof monthlyRaw === 'number' && Number.isFinite(monthlyRaw)) ? monthlyRaw : undefined;
 
   const startDateObj = parseISOorDate(booking?.date);
   const startDE      = fmtDE(startDateObj);
 
-  const firstMonth =
-      (typeof booking?.firstMonthAmount === 'number') ? booking.firstMonthAmount
-    : prorateForStart(startDateObj, monthly);
+  
+
+  const firstMonth = isWeekly
+   ? ((typeof booking?.firstMonthAmount === 'number') ? booking.firstMonthAmount
+      : prorateForStart(startDateObj, monthly))
+   : undefined;
 
   /* ---------- Rechnung-Metadaten (nur Nummer/Datum) ---------- */
   const invoiceNo     = booking?.invoiceNumber || booking?.invoiceNo || '';
@@ -320,15 +332,21 @@ async function sendParticipationEmail({ to, customer, booking, offer, pdfBuffer 
   const house  = customer?.address?.houseNo || '';
   const zip    = customer?.address?.zip     || '';
   const city   = customer?.address?.city    || '';
-  const addressLine = [
-    [street, house].filter(Boolean).join(' ').trim(),
-    [zip, city].filter(Boolean).join(' ').trim(),
-  ].filter(Boolean).join(', ');
+ // const addressLine = [
+    //[street, house].filter(Boolean).join(' ').trim(),
+   // [zip, city].filter(Boolean).join(' ').trim(),
+//  ].filter(Boolean).join(', ');
+
+  const addressLine1 = [street, house].filter(Boolean).join(' ').trim();
+const addressLine2 = [zip, city].filter(Boolean).join(' ').trim();
+const addressLine  = [addressLine1, addressLine2].filter(Boolean).join(', ')
 
   const parentEmail = customer?.parent?.email || booking?.email || '';
   const parentPhone = customer?.parent?.phone || booking?.phone || '';
 
-  const course = booking?.offerTitle || booking?.offerType || offer?.title || 'Buchung';
+  //const course = booking?.offerTitle || booking?.offerType || offer?.title || 'Buchung';
+//  const course = booking?.offerTitle || booking?.offerType || offer?.sub_type || offer?.title || 'Buchung';
+  const course = booking?.offerTitle || booking?.offerType || offer?.title || offer?.sub_type || offer?.type || 'Buchung';
   const venue  = booking?.venue || offer?.location || '';
 
   /* ---------- Tag + Uhrzeit robust zusammensetzen ---------- */
@@ -423,6 +441,10 @@ async function sendParticipationEmail({ to, customer, booking, offer, pdfBuffer 
       email:      parentEmail,
       phone:      parentPhone,
       address:    addressLine,
+
+      addressLine1,
+    addressLine2,
+  
     },
 
     booking: {
@@ -574,7 +596,8 @@ async function sendStornoEmail({ to, customer, booking, offer, pdfBuffer, amount
 
   if (offer) {
     shaped.booking.offerTitle = shaped.booking.offerTitle || offer.title || '';
-    shaped.booking.offerType  = shaped.booking.offerType  || offer.type  || '';
+   // shaped.booking.offerType  = shaped.booking.offerType  || offer.type  || '';
+    shaped.booking.offerType  = shaped.booking.offerType  || offer.sub_type || offer.type  || '';
     shaped.booking.venue      = shaped.booking.venue      || offer.location || '';
   }
 
@@ -747,16 +770,23 @@ async function sendCancellationEmail({ to, customer, booking, offer, pdfBuffer }
   const cancelReason   = booking?.cancelReason || '';
   const cancellationNo = booking?.cancellationNo || booking?.cancellationNumber || '';
 
+  const endDateRaw = booking?.endDate || null;
+const endDateDE  = endDateRaw ? new Intl.DateTimeFormat('de-DE').format(new Date(endDateRaw)) : '';
+
   // --- PDF bauen (falls nicht mitgegeben) ---
   const ensureBuf = pdfBuffer || await buildCancellationPdf({
     customer,
     booking,
     offer,
     date:            cancelDate,
+    endDate:        booking?.endDate || null,
     reason:          cancelReason,
     cancellationNo:  cancellationNo || undefined,
     refInvoiceNo:    refInvoiceNo   || undefined,
     refInvoiceDate:  refInvoiceDate || undefined,
+
+    date:   cancelDate ? new Intl.DateTimeFormat('de-DE').format(new Date(cancelDate)) : '',
+  endDate: endDateDE || '',
   });
 
   // --- Brand & Logo für Inline/Anhang ---
@@ -804,6 +834,9 @@ async function sendCancellationEmail({ to, customer, booking, offer, pdfBuffer }
     cancellation: {
       number: cancellationNo || '',
       date:   cancelDate ? new Intl.DateTimeFormat('de-DE').format(new Date(cancelDate)) : '',
+
+     
+  endDate: endDateDE || '',
     },
 
     signature: {
