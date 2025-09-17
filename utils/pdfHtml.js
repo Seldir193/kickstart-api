@@ -101,6 +101,16 @@ Handlebars.registerHelper('fullName', function (obj) {
   return parts.join(' ');
 });
 
+// Kursname ohne Ort/Adresse (trennt an •, —, – oder |)
+Handlebars.registerHelper('courseOnly', function (title) {
+  if (!title) return '';
+  const s = String(title);
+  // an erster Trennmarke abschneiden (ohne normales Minus, damit Bindestrich-Namen bleiben)
+  const cut = s.split(/\s*(?:[•|]|—|–)\s*/);
+  return (cut[0] || '').trim();
+});
+
+
 /* ====================== Templates ====================== */
 function resolveHbsPath(baseName) {
   const name = String(baseName || '').trim();
@@ -171,8 +181,10 @@ function hydrateCustomerWithBooking(customer = {}, booking = {}) {
 function applyOfferSnapshot(booking = {}, offer) {
   const out = { ...booking };
   if (offer) {
-    out.offerTitle = out.offerTitle || offer.title || '';
-    out.offerType  = out.offerType  || offer.type  || '';
+    //out.offerTitle = out.offerTitle || offer.title || '';
+     out.offerTitle = out.offerTitle || offer.title || offer.sub_type || offer.type || '';
+    //out.offerType  = out.offerType  || offer.type  || '';
+    out.offerType  = out.offerType  || offer.sub_type || offer.type  || '';
     out.venue      = out.venue      || offer.location || '';
   }
   if (!out.offer && (out.offerTitle || out.offerType)) {
@@ -218,6 +230,8 @@ async function bookingPdfBufferHTML(booking) {
       message: booking?.message || '',
       status: booking?.status || '',
       confirmedAt: booking?.confirmedAt || null,
+
+     
     },
   });
 
@@ -230,16 +244,11 @@ async function bookingPdfBufferHTML(booking) {
 
 
 
-/** Teilnahmebestätigung + Rechnungsdaten (Kurzformat, Referenzen optional per Param) */
+/** Teilnahmebestätigung + Rechnungsdaten */
 async function buildParticipationPdfHTML({
-  customer,
-  booking,
-  offer,
-  invoiceNo,          // bevorzugt, z.B. "AT-25-0013"
-  invoiceDate,        // bevorzugt (Date|string)
-  monthlyAmount,      // optional Override
-  firstMonthAmount,   // optional Override
-  venue,              // optional Override
+  customer, booking, offer,
+  invoiceNo, invoiceDate,
+  monthlyAmount, firstMonthAmount, venue,
 }) {
   const brand = getBrand();
 
@@ -248,25 +257,58 @@ async function buildParticipationPdfHTML({
   if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
   const child  = { ...(customer?.child  || {}) };
 
-  // venue & title robust (Param > booking > offer)
+  // venue & title (nur für andere Stellen; Kopf nutzt booking.offer aus HBS)
   const finalVenue = venue || booking?.venue || offer?.location || '';
   const title =
-    booking?.offerTitle ||
-    booking?.offerType  ||
-    booking?.offer      ||
-    offer?.title        ||
-    '-';
+    booking?.offerTitle || booking?.offerType || booking?.offer || offer?.sub_type || offer?.title || '-';
+
+  /* ---------- Tag/Zeit robust ermitteln (wie in der Mail) ---------- */
+  function weekdayFromISO(iso) {
+    if (!iso) return '';
+    const d = new Date(/\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso}T00:00:00` : iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('de-DE', { weekday: 'long' }).format(d);
+  }
+  function timeRangeFromOffer(off, weekdayName = '') {
+    if (!off) return '';
+    const join = (f, t) => [f, t].filter(Boolean).map(String).map(s => s.trim()).join(' – ');
+    const norm = v => String(v || '').toLowerCase();
+    const w = norm(weekdayName);
+
+    if (Array.isArray(off.days) && off.days.length) {
+      let cand = off.days.find(d =>
+        norm(d?.day) === w || norm(d?.weekday) === w || norm(d?.tag) === w
+      ) || off.days[0];
+      if (cand && typeof cand === 'object') {
+        const from = cand.timeFrom ?? cand.from ?? cand.start ?? (cand.time && (cand.time.from ?? cand.timeStart));
+        const to   = cand.timeTo   ?? cand.to   ?? cand.end   ?? (cand.time && (cand.time.to   ?? cand.timeEnd));
+        if (from || to) return join(from, to);
+        const t = cand.time ?? cand.zeit ?? cand.uhrzeit;
+        if (t) return String(t).replace(/\s*-\s*/g, ' – ').trim();
+      }
+    }
+    const from = off.timeFrom ?? off.from ?? off.start;
+    const to   = off.timeTo   ?? off.to   ?? off.end;
+    if (from || to) return join(from, to);
+    const t = off.time ?? off.zeit ?? off.uhrzeit;
+    return t ? String(t).replace(/\s*-\s*/g, ' – ').trim() : '';
+  }
+
+  const derivedDay  = booking?.kurstag  || booking?.weekday || weekdayFromISO(booking?.date);
+  const derivedTime = booking?.kurszeit || booking?.time || booking?.uhrzeit || timeRangeFromOffer(offer, derivedDay);
+
+  // Endgültige Werte mit möglichst wenig Magie:
+  const dayTimes    = booking?.dayTimes    || derivedDay    || '';
+  const timeDisplay = booking?.timeDisplay || derivedTime   || '';
 
   // --- PREISE ---
   const currency = 'EUR';
-
   const monthlyPrice =
-    (typeof monthlyAmount === 'number')              ? monthlyAmount
-  : (typeof booking?.monthlyAmount === 'number')     ? booking.monthlyAmount
-  : (typeof offer?.price === 'number')               ? offer.price
+    (typeof monthlyAmount === 'number')          ? monthlyAmount
+  : (typeof booking?.monthlyAmount === 'number') ? booking.monthlyAmount
+  : (typeof offer?.price === 'number')           ? offer.price
   : undefined;
 
-  // Fallback: pro-rata aus Startdatum berechnen, wenn nichts kam
   function prorateForStart(dateISO, monthly) {
     const d = new Date((dateISO || '') + 'T00:00:00');
     if (!monthly || Number.isNaN(d.getTime())) return undefined;
@@ -278,15 +320,23 @@ async function buildParticipationPdfHTML({
   }
 
   const firstMonth =
-    (typeof firstMonthAmount === 'number')               ? firstMonthAmount
-  : (typeof booking?.firstMonthAmount === 'number')      ? booking.firstMonthAmount
-  : (booking?.date && typeof monthlyPrice === 'number')  ? prorateForStart(booking.date, monthlyPrice)
+    (typeof firstMonthAmount === 'number')          ? firstMonthAmount
+  : (typeof booking?.firstMonthAmount === 'number') ? booking.firstMonthAmount
+  : (booking?.date && typeof monthlyPrice === 'number') ? prorateForStart(booking.date, monthlyPrice)
   : undefined;
 
   // --- RECHNUNG ---
   const invoiceNumber  = invoiceNo || booking?.invoiceNo || booking?.invoiceNumber || '';
   const invoiceDateRaw = invoiceDate || booking?.invoiceDate || '';
-  const taxNote        = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
+//  const taxNote        = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
+  const taxNote        = 'Umsatzsteuerbefreit nach § 19 UStG';
+
+
+  // Debug (einmalig sinnvoll, dann wieder entfernen)
+  console.log('[PDF ctx.booking]', {
+    offer: booking?.offer,
+    dayTimes, timeDisplay,
+  });
 
   const html = compileTemplate('participation', {
     brand,
@@ -301,14 +351,17 @@ async function buildParticipationPdfHTML({
       date:       booking?.date || '',
       status:     booking?.status || 'active',
       venue:      finalVenue,
+
+      // Kopfzeile im HBS nutzt genau diese:
+      offer:       booking?.offer || title,   // (bei dir bereits „ohne Adresse“ bereinigt)
+      dayTimes:    dayTimes,
+      timeDisplay: timeDisplay,
     },
-    // fürs Template: pricing.*
     pricing: {
       monthly:   monthlyPrice,
       firstMonth,
       currency,
     },
-    // fürs Template: invoice.*
     invoice: {
       number:   invoiceNumber,
       date:     invoiceDateRaw,
@@ -329,15 +382,13 @@ async function buildParticipationPdfHTML({
 
 
 
-
-
-
-
 /** Kündigungsbestätigung (mit Kündigungs-Nr. + Referenz-Rechnung) */
 async function buildCancellationPdfHTML({
   customer,
   booking,
   offer,
+   requestDate,   // << NEU
+ endDate,   
   date,
   reason,
   cancellationNo,           // optional Override (z.B. "KND-925B67")
@@ -348,7 +399,11 @@ async function buildCancellationPdfHTML({
   const hydrated     = hydrateCustomerWithBooking(customer, booking);
   const withOffer    = applyOfferSnapshot(booking, offer);
   const normBooking  = normalizeBookingForPdf(withOffer);
+  //const cancelDate   = date || normBooking.cancelDate;
+
   const cancelDate   = date || normBooking.cancelDate;
+ const reqDate      = requestDate || cancelDate;
+ const endDateEff   = endDate || normBooking.endDate || null;
 
   const parent = { ...hydrated.parent };
   if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
@@ -376,6 +431,9 @@ async function buildCancellationPdfHTML({
     '';
   const refInvoiceDateDE = toDEDate(refInvoiceDate);
 
+
+  
+
   const html = compileTemplate('cancellation', {
     brand,
     customer: {
@@ -396,12 +454,33 @@ async function buildCancellationPdfHTML({
       refInvoiceDateDE,
     },
     details: {
-      cancelDate: toDate(cancelDate) || new Date(),
-      reason: reason || normBooking.cancelReason || '',
+      //cancelDate: toDate(cancelDate) || new Date(),
+    // requestDate,
+     //  endDate,
+      //reason: reason || normBooking.cancelReason || '',
+
+       requestDate: toDate(reqDate) || toDate(cancelDate) || new Date(),
+     endDate    : toDate(endDateEff),
+     cancelDate : toDate(cancelDate) || new Date(),
+     reason     : reason || normBooking.cancelReason || '',
     },
   });
   return renderPdf(html);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /** Storno-Rechnung (mit Storno-Nr. + Referenz-Rechnung) */
 async function buildStornoPdfHTML({
@@ -424,7 +503,9 @@ async function buildStornoPdfHTML({
     : (offer && typeof offer.price === 'number' ? offer.price : 0);
 
   const curr = String(currency || 'EUR');
-  const taxNote = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
+  //const taxNote = 'Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG';
+  const taxNote = 'Umsatzsteuerbefreit nach § 19 UStG';
+
 
   const parent = { ...hydrated.parent };
   if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
