@@ -5,154 +5,162 @@
   <title>Teilnahmebestätigung und Rechnung – {{brand.company}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
+
 </head>
 <body>
 <main class="doc">
 
-  <!-- Topband ohne Mail/Website (Logo rechts im Balken) -->
+  <!-- Kopfband -->
   <div class="topband">
     <span class="claim">{{brand.company}}</span>
     <span class="right"></span>
     {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
   </div>
 
-  <!-- Kleine Zeile nah an der Adresse -->
-  <div class="brand-line">
-    {{brand.company}} | {{brand.addr2}} | {{brand.addr1}}
-  </div>
-
   <!-- Empfängeradresse -->
   <div class="addr">
-{{fullName customer.parent}}
-{{#if customer.address.street}}{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}{{/if}}
-{{#if customer.address.zip}}{{customer.address.zip}}{{/if}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
+    {{#if customer.parent.salutation}}<span class="line">{{customer.parent.salutation}}</span>{{/if}}
+    <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
+
+    {{#if customer.address.street}}
+      <span class="line">
+        {{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}
+      </span>
+    {{/if}}
+
+    {{#if customer.address.zip}}
+      <span class="line">
+        {{customer.address.zip}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
+      </span>
+    {{/if}}
   </div>
 
-  <!-- RECHNUNG -->
-  <h2 class="h2">Rechnungsdaten</h2>
+  <!-- Titel + Einleitung -->
+  <h1 class="subject">Teilnahmebestätigung und Rechnung</h1>
+  <p>Wir bedanken uns für Ihre Buchung und bestätigen die Teilnahme von <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong> an unserem Angebot.</p>
+
+  <!-- Rechnungsdaten -->
+  <div class="section-title">Rechnungsdaten</div>
   <div class="facts">
-    {{#if invoice.number}}
-      <div class="row"><span class="k">Rechnungs-Nr.:</span> <span class="v">{{invoice.number}}</span></div>
-    {{/if}}
+    {{#if invoice.date}}   <div class="row"><span class="k">Rechnungsdatum:</span><span class="v">{{fmtDate invoice.date}}</span></div>{{/if}}
+    {{#if invoice.number}} <div class="row"><span class="k">Rechnungsnr.:</span><span class="v">{{invoice.number}}</span></div>{{/if}}
+    {{#if customer.userId}}<div class="row"><span class="k">Kunden-Nr.:</span><span class="v">{{customer.userId}}</span></div>{{/if}}
+  </div>
 
-    {{#if customer.userId}}
-      <div class="row"><span class="k">Kunden-Nr.:</span> <span class="v">{{customer.userId}}</span></div>
-    {{/if}}
+  <div class="sep-line"></div>
 
-    {{#if invoice.date}}
-      <div class="row"><span class="k">Rechnungsdatum:</span> <span class="v">{{fmtDate invoice.date}}</span></div>
-    {{/if}}
-
-    <div class="row">
-      <span class="k">Betrag (monatl.):</span>
-      <span class="v">
-        {{#if invoice.monthly}}
-          {{fmtMoney invoice.monthly invoice.currency}}
-        {{else}}
-          {{#if invoice.monthlyAmount}}
-            {{fmtMoney invoice.monthlyAmount invoice.currency}}
-          {{else}}
-            {{fmtMoney pricing.monthly pricing.currency}}
-          {{/if}}
+  <!-- POSITIONSBLOCK -->
+  <table class="items" role="presentation">
+    <!-- Kopf: NUR Kursname + Zeitfenster -->
+    <tr>
+      <td class="desc muted small">
+        {{#if booking.offer}}{{booking.offer}}{{/if}}
+        {{#if booking.dayTimes}}
+          | Jeweils {{booking.dayTimes}}{{#if booking.timeDisplay}} von {{booking.timeDisplay}}{{/if}}
         {{/if}}
+      </td>
+      <td class="amt"></td>
+    </tr>
+
+    <!-- Zeile 1: erster Monat -->
+    <tr>
+      <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt)</td>
+      <td class="amt">
+        {{#if invoice.firstMonth}}
+          {{fmtMoney invoice.firstMonth invoice.currency}}
+        {{else if invoice.firstMonthAmount}}
+          {{fmtMoney invoice.firstMonthAmount invoice.currency}}
+        {{else if pricing.firstMonth}}
+          {{fmtMoney pricing.firstMonth pricing.currency}}
+        {{else}}
+          {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
+          {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
+          {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+        {{/if}}
+      </td>
+    </tr>
+
+    <!-- Zeile 2: Monatsgebühr (klar, ohne doppeltes Label) -->
+    <tr>
+      <td class="desc"><strong>Die monatliche Teilnahmegebühr beträgt</strong></td>
+      <td class="amt">
+        {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
+        {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
+        {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+      </td>
+    </tr>
+  </table>
+
+  <div class="sep-line"></div>
+
+  <!-- Gesamt rechts (ohne „/ pro Monat“, damit keine doppelte Info) -->
+  <div class="total-line">
+    <span class="label">Gesamt:</span>
+    <span class="value">
+      {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
+      {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
+      {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+    </span>
+  </div>
+
+  <div class="sep-line"></div>
+
+  <!-- Teilnahme -->
+  <div class="section-title">Teilnahme</div>
+  <div class="facts">
+    {{#if booking.date}}<div class="row"><span class="k">Beginn der Teilnahme:</span><span class="v">{{fmtDate booking.date}}</span></div>{{/if}}
+    <div class="row">
+      <span class="k">Veranstaltungsort:</span>
+      <span class="v">
+        {{#if booking.venue}}{{booking.venue}}<br/>{{/if}}
+        {{#if booking.venueAddress}}{{booking.venueAddress}}{{/if}}
+        {{#unless booking.venueAddress}}
+          {{#if booking.venueStreet}}{{booking.venueStreet}}{{/if}}{{#if booking.venueStreet}}{{#if booking.venueZip}}, {{/if}}{{/if}}
+          {{#if booking.venueZip}}{{booking.venueZip}}{{/if}} {{#if booking.venueCity}}{{booking.venueCity}}{{/if}}
+        {{/unless}}
       </span>
     </div>
-
-    {{#if invoice.firstMonth}}
-      <div class="row">
-        <span class="k">Erster Monat:</span>
-        <span class="v">
-          {{fmtMoney invoice.firstMonth invoice.currency}}
-          {{#if booking.date}} (anteilig ab {{fmtDate booking.date}}){{/if}}
-        </span>
-      </div>
-    {{else}}
-      {{#if invoice.firstMonthAmount}}
-        <div class="row">
-          <span class="k">Erster Monat:</span>
-          <span class="v">
-            {{fmtMoney invoice.firstMonthAmount invoice.currency}}
-            {{#if booking.date}} (anteilig ab {{fmtDate booking.date}}){{/if}}
-          </span>
-        </div>
-      {{else}}
-        {{#if pricing.firstMonth}}
-          <div class="row">
-            <span class="k">Erster Monat:</span>
-            <span class="v">
-              {{fmtMoney pricing.firstMonth pricing.currency}}
-              {{#if booking.date}} (anteilig ab {{fmtDate booking.date}}){{/if}}
-            </span>
-          </div>
-        {{/if}}
-      {{/if}}
-    {{/if}}
-
-    {{#if invoice.taxNote}}
-      <div class="row small" style="color:#6b7280;">
-        <span class="k">Steuerhinweis:</span> <span class="v">{{invoice.taxNote}}</span>
-      </div>
-    {{/if}}
+    {{#if booking.endDate}}<div class="row"><span class="k">Ende der Teilnahme:</span><span class="v">{{fmtDate booking.endDate}}</span></div>{{/if}}
   </div>
 
-  <!-- BESTÄTIGUNG -->
-  <div class="subject">Bestätigung Ihrer Teilnahme</div>
-
-  <div class="intro intro-confirm">
-    Wir bestätigen die Teilnahme von
-    <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong>
-    an unserem Angebot
-    <strong class="offer-title">
-      {{#if booking.offerTitle}}{{booking.offerTitle}}{{else}}
-        {{#if booking.offerType}}{{booking.offerType}}{{else}}{{booking.offer}}{{/if}}
-      {{/if}}
-    </strong>.
+  <!-- Zahlung & Hinweise -->
+  <div class="section-title">Zahlung & Hinweise</div>
+  <div class="notes">
+    <p>Bitte nehmen Sie keine Überweisung vor.</p>
+    <p>Die Teilnahmegebühr wird von dem von Ihnen genannten Konto abgebucht.</p>
+    <p>Kein Ausweis der MwSt., da Umsatzsteuerbefreiung gem. § 19 UStG. vorliegt.</p>
   </div>
 
-  <!-- BUCHUNGSDETAILS -->
-  <div class="facts" style="margin-top:12px;">
-    {{#if booking.kurstag}}<div class="row"><span class="k">Kurstag:</span> <span class="v">{{booking.kurstag}}</span></div>{{/if}}
-    {{#if booking.kurszeit}}<div class="row"><span class="k">Kurszeit:</span> <span class="v">{{booking.kurszeit}}</span></div>{{/if}}
-    {{#if booking.date}}<div class="row"><span class="k">Trainingsbeginn:</span> <span class="v">{{fmtDate booking.date}}</span></div>{{/if}}
-    {{#if booking.venue}}<div class="row"><span class="k">Kursort:</span> <span class="v">{{booking.venue}}</span></div>{{/if}}
-    {{#if booking.confirmationCode}}<div class="row"><span class="k">Buchungs-Code:</span> <span class="v">{{booking.confirmationCode}}</span></div>{{/if}}
-  </div>
-
-  <!-- Zahlungshinweis (kurz, ohne Bankdaten im Inhalt) -->
-  <div class="intro payment-note" style="margin-top:12px;">
-    <div>Bitte überweisen Sie die monatliche Teilnahmegebühr jeweils fristgerecht,</div>
-    <div>sofern uns von Ihnen keine Einzugsermächtigung vorliegt.</div>
-  </div>
-
+  <!-- Footer -->
   <div class="footer-spacer"></div>
-
-
-
-
-
-<section class="footer">
-  <div class="foot-inner">
-    <div class="footer-line">
-      <span class="footer-item">{{brand.company}} • {{brand.addr1}} • {{brand.addr2}}</span>
-      <span class="sep">•</span>
-      <a class="footer-item" href="mailto:{{brand.email}}">{{brand.email}}</a>
-      <a class="footer-item" href="{{brand.website}}">
-        {{#if brand.websiteShort}}{{brand.websiteShort}}{{else}}{{brand.website}}{{/if}}
-      </a>
-      <span class="sep">•</span>
-      <span class="footer-item">IBAN: {{brand.iban}}</span>
-      <span class="sep">•</span>
-      <span class="footer-item">BIC: {{brand.bic}}</span>
-    </div>
-  </div>
-</section>
-
-
-
+  <footer class="footer">
+    <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
+      <tr>
+        <td class="footer-col brand">
+          <strong>Münchner Fussball Schule NRW</strong><br/>
+          Hochfelder Straße 33<br/>
+          47226 Duisburg<br/>
+          Deutschland
+        </td>
+        <td class="footer-col meta">
+          <span class="k">Inhaber:</span> <span class="v">Selcuk Kocyigit</span><br/>
+          <span class="k">Tel.:</span> <span class="v">0176-43203362</span><br/>
+          <a href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br/>
+          <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
+        </td>
+        <td class="footer-col bank">
+          <span class="k">Bank:</span> <span class="v">Commerzbank</span><br/>
+          <span class="k">IBAN:</span> <span class="v nowrap">DE13350400380595090200</span><br/>
+          <span class="k">BIC:</span> <span class="v nowrap">COBADEFFXXX</span>
+        </td>
+      </tr>
+    </table>
+  </footer>
 
 </main>
 </body>
 </html>
+
 
 
 
