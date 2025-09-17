@@ -1,6 +1,4 @@
-
-
-/* --- A4 Seite & Typo --- */
+/* --- Seite & Typografie --- */
 @page { size: A4; margin: 15mm 15mm 18mm 15mm; }
 
 html, body {
@@ -12,168 +10,180 @@ html, body {
 
 a { color: inherit; text-decoration: none; }
 
+/* --- Variablen / Header-Feinjustierung --- */
+:root { --header-shift: -1mm; } /* bei Bedarf -3mm … 0mm anpassen */
 
-/* ================= Topband (kompakt, Logo rechts) ================= */
-.doc { position: relative; padding-top: 6mm; }  /* Seite minimal nach unten rücken */
+/* --- Grundlayout --- */
+.doc { position: relative; padding-top: 6mm; }
 
+/* ===================== Topband ===================== */
 .topband {
   position: relative;
-  height: 7mm;                   /* kompakter Balken */
-  background: #3e6294 ;            /* dein Blau */
+  height: 7mm;
+  background: #3e6294;
   border-radius: 2mm;
   display: flex; align-items: center; justify-content: center;
   padding: 0 10mm;
-  z-index: 1;
-overflow: visible;
+  overflow: visible;
   transform: translateY(var(--header-shift));
+  z-index: 1;
 }
 .topband .claim{
-  color:#fff;
-  font-weight:900;
-  font-size:4.8mm;                /* kleiner, wirkt „weißer“ */
-  letter-spacing:.2px;
+  color:#fff; font-weight:900; font-size:4.8mm; letter-spacing:.2px;
   text-shadow:0 1px 0 rgba(0,0,0,.18);
 }
-.topband .right { display:none; }
-
-/* Logo im Balken – nicht abgeschnitten, ca. 3/4 im Blau */
+.topband .right{ display:none; }
 .topband .brand-logo{
-  position:absolute;
-  right:10mm;
-                     /* positiv => nichts ragt aus dem Seitenrand */
-  width:30mm;                     /* bei Bedarf 28–34mm */
-  display:block;
-  z-index:2;
-
-  top: -2.2mm !important;
+  position:absolute; right:10mm; top:-2.2mm;
+  width:30mm; display:block; z-index:2;
 }
 
+/* Optional: kleine Brand-Zeile (falls verwendet) */
+.brand-line{ font-size:5.5pt; margin:3mm 0 .8mm; }
 
-:root {
-  /* hier einfach anpassen: -2mm, -3mm, -4mm ... */
-  --header-shift: -3mm;
-}
+/* Dünne HR (falls verwendet) */
+.hr{ border:0; border-top:1px solid #e5e7eb; margin:1.2mm 0 2mm; }
 
+/* ===================== Überschriften / Texte ===================== */
+.h1 { font-size:20px; font-weight:700; margin:0; }
+.h2 { font-size:16px; font-weight:600; margin:7mm 0 8px; }
 
-/* Brand-Zeile kleiner und etwas weiter unten;
-   Adresse bleibt dicht dran */
-.brand-line{
-  font-size: 5.5pt;     /* kleiner als vorher */
-  margin: 3mm 0 .8mm;   /* weiter runter (top=3mm), unten dicht an Adresse */
-}
+.subject { font-size:24px; font-weight:700; margin:16px 0 8px; }
+.intro   { margin:4mm 0 12px; }
 
-/* Adresse noch näher an die Brand-Zeile */
+/* ===================== Empfängeradresse ===================== */
 .addr{
-  white-space: pre-line;
+  white-space: normal;
+  line-height: 1.18;
+  color: #6b7280;
 }
+.addr .line{ display:block; }
 
-.addr + .h2{
-  margin-top: 22mm !important;   /* mehr Abstand als bisher (war ~7mm) */
-}
+/* Adresse vom Header lösen + Luft zum Content */
+.doc .addr{ margin:16mm 0 16mm !important; }
+.doc .addr + .subject{ margin-top:0 !important; }
 
-/* vorhandene dünne Linie unter dem Kopf (nicht neu) */
-.hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1.2mm 0 2mm; }
+/* ===================== Faktenspalten ===================== */
+.facts{ margin:0 0 8px; }
+.facts .row{ display:flex; gap:12px; margin:2px 0; }
+.facts .k{ min-width:180px; color:#374151; }
+.facts .v{ color:#111827; }
 
+/* ===================== Trennlinie ===================== */
+.sep-line{ border-top:1px solid #d1d5db; height:0; margin:10px 0 12px; }
 
-/* ================= Typografie / Sektionen ================= */
-.h1 { font-size: 20px; font-weight: 700; margin: 0; }
-.h2 { font-size: 16px; font-weight: 600; margin: 7mm 0 8px; }
-.subject { font-size: 16px; font-weight: 700; margin: 5mm 0 6px; }
-.intro { margin: 4mm 0 12px; }
+/* ===================== Positionstabelle ===================== */
+.items{ width:100%; border-collapse:collapse; }
+.items td{ vertical-align:top; padding:2px 0; }
+.items .desc{ width:72%; }
+.items .amt{ width:28%; text-align:right; white-space:nowrap; }
 
+.muted{ color:#6b7280; }
+.small{ font-size:.9rem; }
 
-/* Fakten (mono) */
-.facts { margin: 6px 0 10px; }
-.facts .row { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-.facts .k { display: inline-block; width: 160px; color: #6b7280; }
-.facts .v { opacity: .95; }
+/* ===================== Summenzeile ===================== */
+.total-line{ display:flex; justify-content:flex-end; gap:10px; margin:6px 0 0; }
+.total-line .label{ color:#111827; }
+.total-line .value{ font-weight:600; }
 
-/* Key-Value Grid (optional) */
-.kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; margin: 8px 0 12px; }
-.kv .k { color: #6b7280; }
-.kv .v { color: #111827; }
+/* ===================== Hinweise ===================== */
+.notes{ margin-top:4px; }
+.notes p{ margin:2px 0; line-height:1.35; }
 
-/* Tabelle (Positionen) */
-.table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-.table th, .table td { padding: 8px 10px; }
-.table thead th { border-bottom: 1px solid #e5e7eb; }
-.table tbody tr + tr td { border-top: 1px solid #f3f4f6; }
-.ta-center { text-align: center; }
-.ta-right  { text-align: right; }
+/* ===================== Vertikaler Rhythmus ===================== */
+/* „Teilnahme“ deutlich tiefer; Abstand zu „Zahlung & Hinweise“ */
+.sep-line + .section-title{ margin-top:12mm !important; }
+.facts + .section-title{ margin-top:8mm !important; }
+.section-title{ font-size:1rem; font-weight:600; color:#111827; margin:12px 0 6px; }
+.section-title + .facts{ margin-top:8px !important; }
+.section-title + .notes{ margin-top:8px !important; }
 
-/* Summe */
-.totals { display: flex; justify-content: flex-end; align-items: baseline; gap: 12px; margin-top: 10px; }
-.totals .label { color: #6b7280; }
-.totals .amount { font-weight: 700; }
+/* ===================== Alternative Tabellen (falls benötigt) ===================== */
+.table{ width:100%; border-collapse:collapse; margin-top:6px; }
+.table th, .table td{ padding:8px 10px; }
+.table thead th{ border-bottom:1px solid #e5e7eb; }
+.table tbody tr + tr td{ border-top:1px solid #f3f4f6; }
+.ta-center{ text-align:center; }
+.ta-right{ text-align:right; }
 
+.totals{ display:flex; justify-content:flex-end; align-items:baseline; gap:12px; margin-top:10px; }
+.totals .label{ color:#6b7280; }
+.totals .amount{ font-weight:700; }
 
+.table--flush-left thead th:first-child,
+.table--flush-left tbody td:first-child{ padding-left:0 !important; }
 
-  /* Erste Spalte der Positionstabelle bündig zum Haupt-Textbereich */
-  .table--flush-left thead th:first-child,
-  .table--flush-left tbody td:first-child{
-    padding-left: 0 !important;   /* statt der Standard 10px */
-  }
+.totals--align-facts{ justify-content:flex-end !important; padding-right:9px; }
 
+/* ===================== Spezielle Blöcke (optional genutzt) ===================== */
+.intro-confirm{ margin-top:3mm; }
+.intro-confirm br{ line-height:1; }
+.payment-note{ margin-top:3mm; }
+.payment-note > div + div{ margin-top:0; }
+.offer-title{ display:block; margin:0; font-weight:700; }
+.intro-confirm .line{ display:block; margin:0; line-height:1.45; }
 
+/* Kündigung (falls genutzt) */
+.subject-cancel{ margin-top:22mm !important; }
+.intro-confirmation{ margin-top:3mm !important; }
+.facts-cancel{ margin-top:8.5mm !important; margin-bottom:15mm !important; }
+.intro-regret{ margin-top:0 !important; }
 
-
-.totals--align-facts{
-    justify-content: flex-end !important;
-    padding-right: 9px; /* entspricht .facts .k (Beschriftungsspalte) */
-  }
-
-
-
-
-/* kein Extra-Abstand zwischen Datum- und Ortszeile */
-.intro-confirm { margin-top: 3mm; }   /* nur oben Luft zum vorherigen Block */
-.intro-confirm br { line-height: 1; } /* kompaktere Zeilenumbrüche innerhalb des Blocks */
-
-/* Zahlungshinweis: Zeilen direkt untereinander */
-.payment-note { margin-top: 3mm; }
-.payment-note > div + div { margin-top: 0; }  /* kein zusätzlicher Abstand */
-
-.offer-title { display:block; margin:0; font-weight:700; }
-.intro-confirm .line { display:block; margin:0; line-height:1.45; }
-
-
-/* ==== Footer exakt auf Content-Breite (180mm) zentrieren ==== */
+/* ===== Footer (konsequent ganz unten, einheitlich hell & kleiner) ===== */
 .footer{
   position: fixed;
-  left: 0; right: 0; bottom: 10mm;
+  left: 0; right: 0; bottom: 0mm;   /* bei Bedarf 1–2mm testen */
   background: #fff;
-  display: flex;                /* zentriert den inneren Container */
-  justify-content: center;
-  /* keine border-top hier */
+  display: flex; justify-content: center;
+  color: #6b7280;                   /* alles hellgrau */
+}
+.footer *{
+  color: inherit;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
-/* Container im Footer: volle Textbreite + Linie */
+/* Abstand im Inhalt, damit nichts in den Footer rutscht */
+.footer-spacer{ height: 24mm; }     /* je nach Inhalt 22–26mm feinjustieren */
+
+/* Innenlayout & Linie */
 .footer > .foot,
 .footer > .foot-inner{
   box-sizing: border-box;
-  width: 180mm;                 /* 210mm - 2*15mm */
+  width: 180mm;                     /* 210mm - 2*15mm Seitenrand */
   border-top: 1px solid #e5e7eb;
-  padding-top: 12px;            /* Abstand Linie → Text */
-  font-size: 11px;
-  line-height: 1.5;
+  padding-top: 12px;
+  font-size: 10px; line-height: 1.5;
   text-align: left;
-  margin: 0;                    /* keine Außenabstände nötig */
+  margin: 0;
+  color: inherit;
 }
 
-/* etwas Luft zwischen den Zeilen */
-.footer > .foot > div + div,
-.footer > .foot-inner > div + div{
-  margin-top: 3px;
+/* Tabellen- und Spaltenstruktur im Footer */
+.footer-table{ width: 100%; }
+.footer-col{ vertical-align: top; line-height: 1.35; }
+.footer-col.brand{ width: 34%; }
+.footer-col.meta { width: 33%; }
+.footer-col.bank { width: 33%; }
+
+/* Typo im Footer */
+.footer a{ color: inherit; text-decoration: none; }
+.footer strong{ font-weight: 600; }
+.footer-col .k{ display: inline-block; min-width: 64px; color: inherit; opacity: .95; }
+.nowrap{ white-space: nowrap; }
+
+.sep{ color:#6b7280; user-select:none; }
+
+/* ===================== Druck-Optimierung ===================== */
+.section-title, .facts, .items, .notes, .addr, .footer-table{
+  break-inside:avoid; page-break-inside:avoid;
+}
+.section-title{ break-after:avoid; page-break-after:avoid; }
+
+@media print{
+  *{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
-/* Platz für fixen Footer */
-.footer-spacer{ height: 24mm; }
-
-
-
-
-.small { color: #6b7280; font-size: 11px; }
-.m-0 { margin: 0; }
 
 
 
@@ -198,22 +208,6 @@ overflow: visible;
 
 
 
-/* Kündigung: Überschrift tiefer */
-.subject-cancel { margin-top: 22mm !important; }
-
-
-
-/* … dann mit extra Abstand die Bestätigung */
-.intro-confirmation { margin-top: 3mm !important; }
-
-/* die 4 Zeilen dicht unter der Überschrift + großer Abstand nach unten */
-.facts-cancel {
-  margin-top: 8.5mm !important;
-  margin-bottom: 15mm !important;  /* << großer Abstand */
-}
-
-/* danach startet der Text direkt (kein zusätzlicher Top-Margin hier) */
-.intro-regret { margin-top: 0 !important; }
 
 
 
@@ -228,34 +222,3 @@ overflow: visible;
 
 
 
-
-/* Footer kompakt */
-.footer .foot-inner{
-  font-size:12px;
-  line-height:1.30;
-  text-align:center;
-}
-
-.footer-line{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  align-items:center;
-  gap:8px 12px;
-}
-
-.footer-item{
-  white-space:nowrap;          /* verhindert hässliche Umbrüche innerhalb eines Items */
-}
-
-/* dezente Trenner-Punkte */
-.sep{
-  color:#6b7280;               /* Grau wie im Rest-Theme */
-  user-select:none;
-}
-
-/* Links im Footer unaufdringlich */
-.footer .foot-inner a{
-  color:inherit;
-  text-decoration:none;
-}
