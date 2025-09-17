@@ -71,12 +71,19 @@ function formatStornoNo() {
   return `STORNO-${randHex(6)}`;
 }
 
+function typeCodeFromOffer(offer = {}) {
+  const st = String(offer?.sub_type || '').toLowerCase();
+  if (st === 'powertraining') return 'PW';
+  return typeCodeFromOfferType(offer?.type || '');
+}
+
 module.exports = {
   nextSequence,
   yearFrom,
   typeCodeFromOfferType,
   formatNumber,
   formatInvoiceShort,
+  typeCodeFromOffer,
   formatCancellationNo,
   formatStornoNo,
 };
