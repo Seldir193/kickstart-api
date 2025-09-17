@@ -51,19 +51,23 @@
       </mj-column>
     </mj-section>
 
+   
+
     <!-- Nummernblock (Kündigungs-Nr. / Zur Rechnung / Kunden-Nr. / Datum) -->
-    <mj-section background-color="#ffffff" padding="6px 0 0">
-      <mj-column>
-        <mj-text padding="0 24px">
-          {{#if cancellation.number}}<b>Kündigungs-Nr.:</b> {{cancellation.number}}<br/>{{/if}}
-          {{#if reference.invoiceNo}}
-            <b>Zur Rechnung:</b> {{reference.invoiceNo}}{{#if reference.invoiceDate}} vom {{reference.invoiceDate}}{{/if}}<br/>
-          {{/if}}
-          {{#if customer.userId}}<b>Kunden-Nr.:</b> {{customer.userId}}<br/>{{/if}}
-          {{#if cancellation.date}}<b>Datum:</b> {{cancellation.date}}<br/>{{/if}}
-        </mj-text>
-      </mj-column>
-    </mj-section>
+<mj-section background-color="#ffffff" padding="6px 0 0">
+  <mj-column>
+    <mj-text padding="0 24px">
+      {{#if cancellation.number}}<b>Kündigungs-Nr.:</b> {{cancellation.number}}<br/>{{/if}}
+      {{#if reference.invoiceNo}}
+        <b>Zur Rechnung:</b> {{reference.invoiceNo}}{{#if reference.invoiceDate}} vom {{reference.invoiceDate}}{{/if}}<br/>
+      {{/if}}
+      {{#if customer.userId}}<b>Kunden-Nr.:</b> {{customer.userId}}<br/>{{/if}}
+      {{#if cancellation.date}}<b>Datum:</b> {{cancellation.date}} <b>zum</b> {{cancellation.endDate}}<br/>{{/if}} 
+      
+    </mj-text>
+  </mj-column>
+</mj-section>
+
 
     <!-- Textabsatz 1: Bedauern -->
     <mj-section background-color="#ffffff" padding="14px 0 0">
