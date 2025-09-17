@@ -1,12 +1,9 @@
 // utils/billing.js
 'use strict';
 
-const {
-  nextSequence,
-  yearFrom,
-  typeCodeFromOfferType,
-  formatNumber,
-} = require('../utils/sequences');
+
+
+const { nextSequence, yearFrom, typeCodeFromOffer, formatNumber } = require('../utils/sequences');
 
 /* ---------- intern: Booking sicher speichern (Subdoc oder Model) ---------- */
 async function persistBooking(booking) {
@@ -73,8 +70,9 @@ function normCurrency(c) {
 
 /* ---------- Nummern-/Daten-Zuweisung ---------- */
 async function assignInvoiceData({ booking, offer, providerId = '1' }) {
-  const code =
-    (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+  //const code =
+   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+    const code = (offer && (offer.code || typeCodeFromOffer(offer))) || 'XX';
   const year = yearFrom();
   const seq  = await nextSequence(`invoice:${code}:${year}`);
 
@@ -94,6 +92,7 @@ async function assignCancellationData({
   booking,
   providerId = '1',
   cancellationDate = new Date(),
+  endDate,
 }) {
   const code = 'K';
   const year = yearFrom();
@@ -104,6 +103,9 @@ async function assignCancellationData({
   booking.cancellationNo     = booking.cancellationNumber;
 
   if (!booking.cancellationDate) booking.cancellationDate = cancellationDate;
+
+  if (!booking.cancelDate)       booking.cancelDate       = booking.cancellationDate; // vereinheitlicht
+  if (endDate && !booking.endDate) booking.endDate = endDate;
 
   await persistBooking(booking);
   return booking;
@@ -116,8 +118,9 @@ async function assignStornoData({
   providerId = '1',
   stornoDate = new Date(),
 }) {
-  const code =
-    (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+//  const code =
+   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+    const code = (offer && (offer.code || typeCodeFromOffer(offer))) || 'XX';
   const year = yearFrom();
   const seq  = await nextSequence(`storno:${code}:${year}`);
 
