@@ -12,6 +12,13 @@ const router = express.Router();
 
 /* ===================== Helpers ===================== */
 
+// Display-Name: bevorzugt sub_type, sonst type
+function offerDisplayName(obj) {
+  const st = (obj?.sub_type || '').trim();
+  return st ? st : String(obj?.type || '');
+}
+
+
 // Allowed weekdays normalizer
 const ALLOWED_DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 function sanitizeDays(input) {
@@ -238,7 +245,8 @@ router.post('/', async (req, res) => {
       ? formatLocationFromPlace(placeDoc)
       : String(b.location || '').trim();
 
-    const title = [String(b.type), locationStr].filter(Boolean).join(' • ');
+    //const title = [String(b.type), locationStr].filter(Boolean).join(' • ');
+    const title = [offerDisplayName(b), locationStr].filter(Boolean).join(' • ');
 
     const doc = await Offer.create({
       owner,
@@ -335,7 +343,8 @@ router.put('/:id', async (req, res) => {
       ageTo: b.ageTo === '' || b.ageTo == null ? undefined : Number(b.ageTo),
       info: b.info ? String(b.info) : '',
       onlineActive: !!b.onlineActive,
-      title: [String(b.type), finalLocation].filter(Boolean).join(' • '),
+     // title: [String(b.type), finalLocation].filter(Boolean).join(' • '),
+      title: [offerDisplayName(b), finalLocation].filter(Boolean).join(' • '),
 
       coachName: b.coachName ? String(b.coachName).trim() : '',
       coachEmail: b.coachEmail ? String(b.coachEmail).trim() : '',
@@ -460,12 +469,16 @@ router.patch('/:id', async (req, res) => {
     if ('sub_type' in update)    ops.$set.sub_type   = String(update.sub_type || '').trim();
     if ('legacy_type' in update) ops.$set.legacy_type= String(update.legacy_type || '').trim();
 
-    // Titel ggf. neu bauen, wenn Typ oder Standort mitkam
-    if ('type' in update || 'placeId' in update || 'location' in update) {
-      const t = String(('type' in update ? update.type : current.type) || '');
-      const loc = finalLocation || String(current.location || '');
-      ops.$set.title = [t, loc].filter(Boolean).join(' • ');
-    }
+ 
+
+    if ('type' in update || 'sub_type' in update || 'placeId' in update || 'location' in update) {
+   const t = offerDisplayName({
+     type: ('type' in update ? update.type : current.type),
+     sub_type: ('sub_type' in update ? update.sub_type : current.sub_type),
+   });
+   const loc = finalLocation || String(current.location || '');
+   ops.$set.title = [t, loc].filter(Boolean).join(' • ');
+ }
 
     // leeren $unset entfernen
     if (Object.keys(ops.$unset).length === 0) delete ops.$unset;
