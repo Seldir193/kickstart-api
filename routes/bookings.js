@@ -1,5 +1,3 @@
-
-
 // routes/bookings.js
 'use strict';
 
@@ -9,14 +7,10 @@ const mongoose = require('mongoose');
 
 const Booking   = require('../models/Booking');
 const Offer     = require('../models/Offer');
+const Customer  = require('../models/Customer');
 const adminAuth = require('../middleware/adminAuth');
 
-const { bookingPdfBuffer } = require('../utils/pdf');
-
-
-
 const {
-  sendMail,
   sendBookingAckEmail,
   sendBookingProcessingEmail,
   sendBookingCancelledEmail,
@@ -25,15 +19,33 @@ const {
 
 const router = express.Router();
 
-/* ----------------------------- Helpers ------------------------------ */
+const ALLOWED_STATUS = ['pending','processing','confirmed','cancelled','deleted'];
 
-function isOneOff(offer) {
-  if (!offer) return false;
-  if (String(offer.type) === 'PersonalTraining') return true;
-  if (String(offer.sub_type || '').toLowerCase() === 'powertraining') return true;
-  return false;
+function normalizeStatus(s) { return s === 'canceled' ? 'cancelled' : s; }
+function escapeRegex(s) { return String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function resolveOwner(req) {
+  const fromHeader = req.get('x-provider-id');
+  const fallback   = process.env.DEFAULT_OWNER_ID;
+  const id = (fromHeader || fallback || '').trim();
+  if (!id || !mongoose.isValidObjectId(id)) return null;
+  return new mongoose.Types.ObjectId(id);
 }
 
+function prorateForStart(dateISO, monthlyPrice) {
+  const d = new Date(dateISO + 'T00:00:00');
+  if (isNaN(d.getTime()) || typeof monthlyPrice !== 'number' || !isFinite(monthlyPrice)) {
+    return { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: monthlyPrice ?? null };
+  }
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const daysInMonth   = new Date(y, m + 1, 0).getDate();
+  const startDay      = d.getDate();
+  const daysRemaining = daysInMonth - startDay + 1;
+  const factor        = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
+  const firstMonthPrice = Math.round(monthlyPrice * factor * 100) / 100;
+  return { daysInMonth, daysRemaining, factor, firstMonthPrice, monthlyPrice };
+}
 
 function validate(payload) {
   const errors = {};
@@ -42,61 +54,104 @@ function validate(payload) {
   if (!/^\S+@\S+\.\S+$/.test(payload.email || '')) errors.email = 'Invalid email';
   const age = Number(payload.age);
   if (!age || age < 5 || age > 19) errors.age = 'Age 5–19';
-  if (!payload.date) errors.date = 'Pick a date'; // yyyy-mm-dd
+  if (!payload.date) errors.date = 'Pick a date';
   if (!['U8','U10','U12','U14','U16','U18'].includes(payload.level)) errors.level = 'Invalid level';
   return errors;
 }
 
-const ALLOWED_STATUS = ['pending','processing','confirmed','cancelled','deleted'];
+function buildFilter(query, ownerId) {
+  const { q, status, date } = query || {};
+  const filter = { owner: ownerId };
 
-const fmtDE = (isoDate) => {
-  const [y,m,d] = String(isoDate || '').split('-').map(n => parseInt(n,10));
-  if (!y || !m || !d) return String(isoDate || '');
-  return `${String(d).padStart(2,'0')}.${String(m).padStart(2,'0')}.${y}`;
-};
-
-// Provider aus Header
-function getProviderId(req) {
-  const v = req.get('x-provider-id');
-  return v ? String(v).trim() : null;
-}
-function requireProvider(req, res) {
-  const pid = getProviderId(req);
-  if (!pid) {
-    res.status(401).json({ ok: false, error: 'Unauthorized: missing provider' });
-    return null;
+  if (status && status !== 'all' && ALLOWED_STATUS.includes(String(status))) {
+    filter.status = String(status);
   }
-  return pid;
-}
+  if (date) filter.date = String(date);
 
-// Misc helpers
-function escapeRegex(s) { return String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-/** Pro-rata für ersten Monat (anteilig ab Startdatum) */
-function prorateForStart(dateISO, monthlyPrice) {
-  const d = new Date(dateISO + 'T00:00:00');
-  if (isNaN(d.getTime()) || typeof monthlyPrice !== 'number' || !isFinite(monthlyPrice)) {
-    return { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: monthlyPrice ?? null };
+  if (q && String(q).trim()) {
+    const needle = String(q).trim();
+    filter.$or = [
+      { firstName:        { $regex: needle, $options: 'i' } },
+      { lastName:         { $regex: needle, $options: 'i' } },
+      { email:            { $regex: needle, $options: 'i' } },
+      { level:            { $regex: needle, $options: 'i' } },
+      { message:          { $regex: needle, $options: 'i' } },
+      { confirmationCode: { $regex: needle, $options: 'i' } },
+    ];
   }
-  const y = d.getFullYear();
-  const m = d.getMonth(); // 0..11
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const startDay = d.getDate();
-  const daysRemaining = daysInMonth - startDay + 1; // inkl. Starttag
-  const factor = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
-  const firstMonthPrice = Math.round(monthlyPrice * factor * 100) / 100;
-  return { daysInMonth, daysRemaining, factor, firstMonthPrice, monthlyPrice };
+  return filter;
 }
 
-/** Einheitliche Statusform (UI schickt z.T. "canceled") */
-const normalizeStatus = (s) => (s === 'canceled' ? 'cancelled' : s);
+/* ---------- Customer-Helper ---------- */
+async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload }) {
+  const emailLower = String(payload.email || '').trim().toLowerCase();
+
+  let customer = await Customer.findOne({
+    owner: ownerId,
+    $or: [
+      { emailLower },
+      { email: emailLower },
+      { 'parent.email': emailLower },
+    ],
+  });
+
+  const bookingDate = new Date(String(payload.date) + 'T00:00:00');
+  const venue = typeof offer?.location === 'string'
+    ? offer.location
+    : (offer?.location?.name || offer?.location?.title || '');
+
+  const bookingRef = {
+    bookingId:   bookingDoc._id,
+    offerId:     offer._id,
+    offerTitle:  String(offer.title || ''),
+    offerType:   String(offer.type || ''),
+    venue,
+    date:        isNaN(bookingDate.getTime()) ? null : bookingDate,
+    status:      'active',
+    priceAtBooking: typeof offer.price === 'number' ? offer.price : null,
+  };
+
+  if (!customer) {
+    await Customer.syncCounterWithExisting(ownerId);
+    const nextUserId = await Customer.nextUserIdForOwner(ownerId);
+
+    customer = await Customer.create({
+      owner: ownerId,
+      userId: nextUserId,
+      email: emailLower,
+      emailLower,
+      newsletter: false,
+      parent: { email: emailLower },
+      child:  { firstName: String(payload.firstName||''), lastName: String(payload.lastName||'') },
+      notes:  (payload.message || '').toString(),
+      bookings: [bookingRef],
+      marketingStatus: null,
+    });
+    return customer;
+  }
+
+  if (customer.userId == null) {
+    await Customer.assignUserIdIfMissing(customer);
+  }
+
+  const already = customer.bookings?.some(b =>
+    String(b.offerId) === String(offer._id) &&
+    String(b.bookingId) === String(bookingDoc._id)
+  );
+  if (!already) customer.bookings.push(bookingRef);
+
+  if (!customer.emailLower) customer.emailLower = emailLower;
+  if (!customer.email)      customer.email = emailLower;
+  if (!customer.parent)     customer.parent = {};
+  if (!customer.parent.email) customer.parent.email = emailLower;
+
+  await customer.save();
+  return customer;
+}
 
 /* ------------------------------ Routes ------------------------------ */
 
-
-
-
-/** PUBLIC/ADMIN: Create booking (sendet Eingangsbestätigung via MJML) */
+// Create booking
 router.post('/', async (req, res) => {
   try {
     const errors = validate(req.body);
@@ -108,17 +163,16 @@ router.post('/', async (req, res) => {
     }
 
     const offer = await Offer.findById(String(req.body.offerId))
-      .select('_id owner title type location onlineActive price')
+      .select('_id owner title type category sub_type location onlineActive price')
       .lean();
     if (!offer) return res.status(400).json({ ok: false, error: 'Offer not found' });
     if (offer.onlineActive === false) return res.status(400).json({ ok: false, error: 'Offer not bookable' });
 
-    const pidHeader = getProviderId(req);
+    const pidHeader = (req.get('x-provider-id') || '').trim();
     if (pidHeader && String(offer.owner) !== pidHeader) {
       return res.status(403).json({ ok: false, error: 'Offer does not belong to this provider' });
     }
 
-    // DUPLICATE-Check (First/Last exakt, case-insensitive) für dieses Angebot
     const first = String(req.body.firstName || '').trim();
     const last  = String(req.body.lastName  || '').trim();
     if (first && last) {
@@ -140,18 +194,14 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Pro-rata berechnen (falls Preis am Angebot)
-
-
-
-   const isWeekly =
-   offer?.category === 'Weekly' ||
-   offer?.type === 'Foerdertraining' ||
-   offer?.type === 'Kindergarten';
- const monthlyPrice = (isWeekly && typeof offer.price === 'number') ? offer.price : null;
- const pro = (isWeekly && monthlyPrice != null)
-   ? prorateForStart(req.body.date, monthlyPrice)
-   : { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: null };
+    const isWeekly =
+      offer?.category === 'Weekly' ||
+      offer?.type === 'Foerdertraining' ||
+      offer?.type === 'Kindergarten';
+    const monthlyPrice = (isWeekly && typeof offer.price === 'number') ? offer.price : null;
+    const pro = (isWeekly && monthlyPrice != null)
+      ? prorateForStart(req.body.date, monthlyPrice)
+      : { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null, monthlyPrice: null };
 
     const created = await Booking.create({
       owner:   offer.owner,
@@ -167,7 +217,18 @@ router.post('/', async (req, res) => {
       adminNote: req.body.adminNote || '',
     });
 
-    // Eingangsbestätigung (MJML)
+    // ⬇️ Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
+    try {
+      await upsertCustomerForBooking({
+        ownerId: offer.owner,
+        offer,
+        bookingDoc: created,
+        payload: req.body,
+      });
+    } catch (custErr) {
+      console.error('[bookings] customer upsert failed:', custErr?.message || custErr);
+    }
+
     try {
       await sendBookingAckEmail({ to: created.email, offer, booking: created, pro });
     } catch (mailErr) {
@@ -181,70 +242,56 @@ router.post('/', async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-/** ADMIN: List bookings (scoped) */
+// List
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const providerId = requireProvider(req, res);
-    if (!providerId) return;
-
-    const { status, q, date, page = 1, limit = 200 } = req.query;
-
-    const filter = { owner: providerId };
-    if (status && ALLOWED_STATUS.includes(String(status))) filter.status = String(status);
-    if (date) filter.date = String(date);
-
-    if (q && String(q).trim().length >= 2) {
-      const needle = String(q).trim();
-      filter.$or = [
-        { firstName: { $regex: needle, $options: 'i' } },
-        { lastName:  { $regex: needle, $options: 'i' } },
-        { email:     { $regex: needle, $options: 'i' } },
-        { message:   { $regex: needle, $options: 'i' } },
-      ];
+    const ownerId = resolveOwner(req);
+    if (!ownerId) {
+      return res.status(500).json({ ok:false, error:'DEFAULT_OWNER_ID missing/invalid' });
     }
 
-    const p = Math.max(1, Number(page));
-    const l = Math.max(1, Math.min(500, Number(limit)));
-    const skip = (p - 1) * l;
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip  = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
-      Booking.find(filter).sort({ createdAt: -1 }).skip(skip).limit(l).lean(),
+    const filter = buildFilter(req.query, ownerId);
+
+    const matchForCounts = { owner: ownerId };
+    if (filter.$or) matchForCounts.$or = filter.$or;
+
+    const [items, total, grouped] = await Promise.all([
+      Booking.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Booking.countDocuments(filter),
+      Booking.aggregate([{ $match: matchForCounts }, { $group: { _id: '$status', n: { $sum: 1 } } }]),
     ]);
 
-    return res.json({ ok: true, bookings: items, total });
+    const counts = { pending:0, processing:0, confirmed:0, cancelled:0, deleted:0 };
+    for (const g of grouped) {
+      const key = (g._id || 'pending');
+      if (counts[key] !== undefined) counts[key] = g.n;
+    }
+
+    return res.json({
+      ok: true,
+      items,
+      bookings: items,
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      counts,
+    });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
+    console.error('[admin/bookings] list failed:', err);
+    return res.status(500).json({ ok:false, error:'List failed' });
   }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/** ADMIN: Change status (scoped) – sendet MJML Mails bei Übergängen */
+// Status ändern
 router.patch('/:id/status', adminAuth, async (req, res) => {
   try {
-    const providerId = requireProvider(req, res);
-    if (!providerId) return;
+    const ownerId = resolveOwner(req);
+    if (!ownerId) return res.status(500).json({ ok:false, error:'DEFAULT_OWNER_ID missing/invalid' });
 
     const rawStatus = String(req.body?.status || '').trim();
     const status = normalizeStatus(rawStatus);
@@ -254,11 +301,11 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
       return res.status(400).json({ ok: false, code: 'VALIDATION', error: 'Invalid status' });
     }
 
-    const prev = await Booking.findOne({ _id: req.params.id, owner: providerId });
+    const prev = await Booking.findOne({ _id: req.params.id, owner: ownerId });
     if (!prev) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
 
     const updated = await Booking.findOneAndUpdate(
-      { _id: req.params.id, owner: providerId },
+      { _id: req.params.id, owner: ownerId },
       { status },
       { new: true }
     );
@@ -267,32 +314,24 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
     let mailSentProcessing = false;
     let mailSentCancelled  = false;
 
-   
- // In Bearbeitung → MJML
     if (status === 'processing' && (prev.status !== 'processing' || forceMail)) {
       try {
         await sendBookingProcessingEmail({ to: updated.email, booking: updated });
         mailSentProcessing = true;
-      } catch (e) {
-        console.error('[BOOKINGS] processing-mail FAILED:', e?.message || e);
-      }
+      } catch (e) { console.error('[BOOKINGS] processing-mail FAILED:', e?.message || e); }
     }
 
-    // Abgesagt/Storno → MJML
     if (status === 'cancelled' && (prev.status !== 'cancelled' || forceMail)) {
       try {
-        if (!updated.email) {
-          console.error('[BOOKINGS] cancelled: missing recipient email');
-        } else {
+        if (updated.email) {
           await sendBookingCancelledEmail({ to: updated.email, booking: updated });
           mailSentCancelled = true;
+        } else {
+          console.error('[BOOKINGS] cancelled: missing recipient email');
         }
-      } catch (e) {
-        console.error('[BOOKINGS] cancellation-mail FAILED:', e?.message || e);
-      }
+      } catch (e) { console.error('[BOOKINGS] cancellation-mail FAILED:', e?.message || e); }
     }
 
-    // Für 'confirmed' keine Mail hier – das macht /:id/confirm mit PDF
     return res.json({ ok: true, booking: updated, mailSentProcessing, mailSentCancelled });
   } catch (err) {
     console.error(err);
@@ -300,23 +339,14 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-
-
-/** ADMIN: Soft delete (scoped) */
+// Soft delete
 router.delete('/:id', adminAuth, async (req, res) => {
   try {
-    const providerId = requireProvider(req, res);
-    if (!providerId) return;
+    const ownerId = resolveOwner(req);
+    if (!ownerId) return res.status(500).json({ ok:false, error:'DEFAULT_OWNER_ID missing/invalid' });
 
     const updated = await Booking.findOneAndUpdate(
-      { _id: req.params.id, owner: providerId },
+      { _id: req.params.id, owner: ownerId },
       { status: 'deleted' },
       { new: true }
     );
@@ -328,27 +358,18 @@ router.delete('/:id', adminAuth, async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-
-
-/** ADMIN: Confirm + send PDF (scoped, idempotent, ?resend=1) */
+// Confirm
 router.post('/:id/confirm', adminAuth, async (req, res) => {
   try {
-    const providerId = requireProvider(req, res);
-    if (!providerId) return;
+    const ownerId = resolveOwner(req);
+    if (!ownerId) return res.status(500).json({ ok:false, error:'DEFAULT_OWNER_ID missing/invalid' });
 
     const id = String(req.params.id || '').trim();
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ ok: false, error: 'Invalid booking id' });
     }
 
-    const booking = await Booking.findOne({ _id: id, owner: providerId });
+    const booking = await Booking.findOne({ _id: id, owner: ownerId });
     if (!booking) return res.status(404).json({ ok:false, error:'Not found' });
 
     const forceResend = String(req.query.resend || '') === '1';
@@ -367,9 +388,12 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
       return res.json({ ok: true, booking, info: 'already confirmed (no email sent)' });
     }
 
+    const offer = booking.offerId
+      ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
+      : null;
+
     try {
-      //const pdf = await bookingPdfBuffer(booking);
-      await sendBookingConfirmedEmail({ to: booking.email, booking });
+      await sendBookingConfirmedEmail({ to: booking.email, booking, offer });
       return res.json({ ok: true, booking, mailSent: true });
     } catch (mailErr) {
       console.error('[bookings:confirm] mail/pdf failed:', mailErr?.message || mailErr);
@@ -381,37 +405,7 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-
-
 module.exports = router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
