@@ -74,7 +74,7 @@
       <mj-column>
         <mj-text padding="0 24px">
           Wir bedauern, dass Sie unser Angebot
-          <strong>{{booking.offer}}</strong><br/>
+          <strong>{{courseOnly booking.offer}}</strong><br/>
           am Veranstaltungsort <strong>{{booking.venue}}</strong> nicht mehr nutzen möchten.
         </mj-text>
       </mj-column>
