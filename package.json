@@ -13,6 +13,9 @@
     "pdf:storno:html": "node scripts/pdf-preview.js storno --html --watch"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
+    "@mailchimp/mailchimp_marketing": "^3.0.80",
+    "@sendgrid/client": "^8.1.6",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -25,13 +28,15 @@
     "mime-types": "^3.0.1",
     "mjml": "^4.15.3",
     "mongoose": "^8.5.2",
-    "nodemailer": "^7.0.5",
-    "pdfkit": "^0.17.1"
+    "mustache": "^4.2.0",
+    "nodemailer": "^7.0.6",
+    "pdfkit": "^0.17.1",
+    "sib-api-v3-sdk": "^8.5.0"
   },
   "devDependencies": {
     "chokidar": "^4.0.3",
     "handlebars": "^4.7.8",
-    "mongodb": "^6.19.0",
+    "mongodb": "^6.20.0",
     "nodemon": "^3.1.0"
   }
 }
