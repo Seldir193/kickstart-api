@@ -1,23 +1,9 @@
-
-
-
-
-
-
-
-
-
-
-
-
 // models/Customer.js
 'use strict';
 
 const mongoose = require('mongoose');
 const { Schema, Types } = mongoose;
-const { normalizeInvoiceNo } = require('../utils/pdfData'); // für kanonische Rechnungsnummern
-
-/* ================= Sub-Schemas ================= */
+const { normalizeInvoiceNo } = require('../utils/pdfData');
 
 const AddressSchema = new Schema({
   street:  { type: String, default: '' },
@@ -43,45 +29,36 @@ const ParentSchema = new Schema({
   phone2:     { type: String, default: '' },
 }, { _id: false });
 
-/**
- * Eingebettete Booking-Referenz im Customer-Dokument.
- * Felder sind kompatibel zu deinen Routen/PDF-Templates.
- */
 const BookingRefSchema = new Schema({
-  /* Offer-Snapshot */
+  bookingId:    { type: Schema.Types.ObjectId, ref: 'Booking' },
+
   offerId:      { type: Schema.Types.ObjectId, ref: 'Offer', required: true },
   offerTitle:   { type: String, default: '' },
-  offerType:    { type: String, default: '' },            // z. B. Kindergarten, Foerdertraining
-  venue:        { type: String, default: '' },            // Ort/Snapshot
-  date:         { type: Date,   default: null },          // Start-/Wunschdatum
+  offerType:    { type: String, default: '' },
+  venue:        { type: String, default: '' },
+  date:         { type: Date,   default: null },
   status:       { type: String, enum: ['active','cancelled','completed','pending'], default: 'active' },
 
-  /* Kündigung */
   cancelDate:     { type: Date,   default: null },
   cancelReason:   { type: String, default: '' },
-  cancellationNo: { type: String, default: '' },          // für cancellation-PDF
+  cancellationNo: { type: String, default: '' },
 
-  /* Preise/Snapshots */
   currency:         { type: String, default: 'EUR' },
-  priceMonthly:     { type: Number, default: null },      // Standardpreis zum Buchungszeitpunkt
-  priceFirstMonth:  { type: Number, default: null },      // Pro-rata 1. Monat
-  priceAtBooking:   { type: Number, default: null },      // fixer Preis (falls separat gesetzt)
+  priceMonthly:     { type: Number, default: null },
+  priceFirstMonth:  { type: Number, default: null },
+  priceAtBooking:   { type: Number, default: null },
 
-  // Für participation.hbs (optional)
   monthlyAmount:    { type: Number, default: null },
   firstMonthAmount: { type: Number, default: null },
 
-  /* Rechnung bei Bestätigung */
-  invoiceNumber: { type: String, default: '', set: normalizeInvoiceNo, trim: true }, // kanonisch (z. B. KIGA-25-0044)
-  invoiceNo:     { type: String, default: '' },                                     // Alias/Legacy
+  invoiceNumber: { type: String, default: '', set: normalizeInvoiceNo, trim: true },
+  invoiceNo:     { type: String, default: '' },
   invoiceDate:   { type: Date,   default: null },
 
-  /* Storno */
   stornoNo:     { type: String, default: '' },
   stornoDate:   { type: Date,   default: null },
   stornoAmount: { type: Number, default: null },
 
-  /* optionale Mehrfach-Referenzen (falls mehrere Rechnungen/Teilleistungen) */
   invoiceRefs: [{
     _id: false,
     number: { type: String, default: '' },
@@ -91,19 +68,20 @@ const BookingRefSchema = new Schema({
   }],
 }, { _id: true, timestamps: true, minimize: false });
 
-/* Zähler für laufende userId pro Provider (Tenant) */
 const CounterSchema = new Schema({
-  _id: { type: String, required: true }, // key: "customer:<ownerId>"
+  _id: { type: String, required: true },
   seq: { type: Number, default: 0 },
 }, { versionKey: false });
 
 const Counter = mongoose.models.Counter || mongoose.model('Counter', CounterSchema);
 
-/* ================= Hauptschema ================= */
-
 const CustomerSchema = new Schema({
   owner:   { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true },
-  userId:  { type: Number, index: true }, // inkrementell pro owner
+  userId:  { type: Number, index: true },
+
+  // wichtige Suchfelder
+  email:      { type: String, default: '' },
+  emailLower: { type: String, default: '' },
 
   newsletter: { type: Boolean, default: false },
 
@@ -114,18 +92,26 @@ const CustomerSchema = new Schema({
   notes:    { type: String, default: '' },
   bookings: { type: [BookingRefSchema], default: [] },
 
-  /* Customer-weite Kündigung (optional, separat von einzelnen Buchungen) */
   canceledAt:         { type: Date, default: null },
   cancellationDate:   { type: Date, default: null },
   cancellationReason: { type: String, default: '' },
   cancellationNo:     { type: String, default: '' },
+
+  // Marketing-/Newsletter
+  marketingProvider:     { type: String, enum: ['mailchimp','brevo','sendgrid', null], default: null },
+  marketingStatus:       { type: String, enum: ['subscribed','pending','unsubscribed','error', null], default: null },
+  marketingContactId:    { type: String, default: null },
+  marketingLastSyncedAt: { type: Date,   default: null },
+  marketingLastError:    { type: String, default: null },
+  marketingConsentAt:    { type: Date,   default: null },
+
 }, { timestamps: true });
 
-/* Indexe */
 CustomerSchema.index({ owner: 1, createdAt: -1 });
 CustomerSchema.index({ userId: 1, owner: 1 });
+CustomerSchema.index({ owner: 1, emailLower: 1 }, { sparse: true });
+CustomerSchema.index({ owner: 1, 'parent.email': 1 }, { sparse: true });
 
-/* Helper: nächste userId pro owner */
 CustomerSchema.statics.nextUserIdForOwner = async function(ownerId) {
   const key = `customer:${ownerId.toString()}`;
   const doc = await Counter.findOneAndUpdate(
@@ -136,4 +122,38 @@ CustomerSchema.statics.nextUserIdForOwner = async function(ownerId) {
   return doc.seq;
 };
 
+// Counter mindestens auf aktuellen Max(userId) bringen
+CustomerSchema.statics.syncCounterWithExisting = async function(ownerId) {
+  const key = `customer:${ownerId.toString()}`;
+  const maxRow = await this.findOne({ owner: ownerId, userId: { $ne: null } })
+    .sort({ userId: -1 })
+    .select('userId')
+    .lean();
+  const max = maxRow?.userId ?? 0;
+  await Counter.findOneAndUpdate(
+    { _id: key },
+    { $max: { seq: max } },
+    { new: true, upsert: true }
+  );
+};
+
+// fehlende userId fortlaufend vergeben
+CustomerSchema.statics.assignUserIdIfMissing = async function(customerDoc) {
+  if (customerDoc.userId != null) return customerDoc.userId;
+  await this.syncCounterWithExisting(customerDoc.owner);
+  const next = await this.nextUserIdForOwner(customerDoc.owner);
+  customerDoc.userId = next;
+  await customerDoc.save();
+  return next;
+};
+
 module.exports = mongoose.models.Customer || mongoose.model('Customer', CustomerSchema);
+
+
+
+
+
+
+
+
+
