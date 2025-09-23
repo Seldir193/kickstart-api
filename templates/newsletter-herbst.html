@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Herbstferien Powertraining</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin:0; padding:0; background:#f5f7fb; font-family: Arial, Helvetica, sans-serif; color:#111827; }
+    .container { max-width:640px; margin:0 auto; background:#ffffff; }
+    .header { background:#3e6294; color:#fff; padding:12px 24px; }
+    .header td { vertical-align: middle; }
+    .logo { max-width:120px; height:auto; display:block; }
+    .brand { font-size:20px; font-weight:700; text-align:center; }
+    .section { padding:16px 24px; }
+    .h1 { font-size:22px; font-weight:700; margin:0 0 8px 0; }
+    .h2 { font-size:18px; font-weight:700; margin:16px 0 6px 0; }
+    .p  { font-size:14px; line-height:22px; margin:0 0 8px 0; }
+    .li { font-size:14px; line-height:22px; }
+    .btn-wrap { text-align:center; padding:16px 24px 24px; }
+    .btn {
+      display:inline-block; text-decoration:none;
+      padding:12px 18px; border-radius:6px;
+      background:#3e6294; color:#ffffff; font-weight:700;
+    }
+    .btn-wrap a {color:#ffffff}
+    .divider { border-top:1px solid #e5e7eb; margin:0; }
+    .social { text-align:center; font-size:14px; line-height:22px; padding:8px 24px 0; }
+    .social a { color:#0f172a; text-decoration:none; margin:0 6px; }
+    .footer { background:#f1f5f9; text-align:center; color:#6b7280; padding:12px 24px 16px; font-size:13px; line-height:20px; }
+    .footer a { color:#0f172a; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tr>
+      <td>
+        <div class="container">
+          <!-- Header -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="header">
+            <tr>
+              <td width="140">
+                <img src="{{brand.logoUrl}}" alt="{{brand.company}}" class="logo">
+              </td>
+              <td>
+                <div class="brand">{{brand.company}}</div>
+              </td>
+            </tr>
+          </table>
+
+          <hr class="divider">
+
+          <!-- Intro -->
+          <div class="section">
+            <p class="p">Hallo {{greetingName}},</p>
+            <p class="p">gute Neuigkeiten! In den Herbstferien bieten wir ein kompaktes, intensives Powertraining an – perfekt, um Technik, Koordination und Spielfreude zu pushen.</p>
+          </div>
+
+          <!-- Event-Block -->
+          <div class="section">
+            <h1 class="h1">Herbstferien Powertraining</h1>
+            <p class="p"><strong>Termin:</strong> 13.10. – 17.10.2025</p>
+            <p class="p"><strong>Uhrzeit:</strong> täglich 10:00 – 12:00 Uhr</p>
+            <p class="p"><strong>Preis:</strong> 35 € pro Tag</p>
+            <p class="p"><strong>Ort:</strong> {{event.location}}</p>
+
+            <h2 class="h2">Was dich erwartet</h2>
+            <ul style="padding-left:18px; margin:8px 0;">
+              <li class="li">Technikschulung (Dribbling, Passspiel, Ballannahme)</li>
+              <li class="li">Koordination &amp; Schnelligkeit</li>
+              <li class="li">Kleine Spielformen &amp; Wettkämpfe</li>
+              <li class="li">Motivierendes Feedback vom Trainer-Team</li>
+            </ul>
+          </div>
+
+          <!-- CTA -->
+          <div class="btn-wrap">
+            <a href="{{cta.url}}" class="btn" target="_blank" rel="noopener">Jetzt Platz sichern</a>
+          </div>
+
+          <hr class="divider">
+
+          <!-- Signatur -->
+          <div class="section">
+            <p class="p">{{signature.signoff}},<br>{{signature.name}}<br><strong>Dein Trainer-Team</strong></p>
+          </div>
+
+        
+
+ <!-- Social Icons (CID-Namen passend zum Script) -->
+<div class="section" style="padding-top:8px; text-align:center;">
+  <a href="{{social.facebook}}" target="_blank" rel="noopener" style="display:inline-block; margin:0 6px;">
+    <img src="cid:icon-facebook" width="22" height="22" alt="Facebook" style="display:inline-block; border:0; vertical-align:middle;">
+  </a>
+  <a href="{{social.instagram}}" target="_blank" rel="noopener" style="display:inline-block; margin:0 6px;">
+    <img src="cid:icon-instagram" width="22" height="22" alt="Instagram" style="display:inline-block; border:0; vertical-align:middle;">
+  </a>
+  <a href="{{social.tiktok}}" target="_blank" rel="noopener" style="display:inline-block; margin:0 6px;">
+    <img src="cid:icon-tiktok" width="22" height="22" alt="TikTok" style="display:inline-block; border:0; vertical-align:middle;">
+  </a>
+  <a href="{{social.youtube}}" target="_blank" rel="noopener" style="display:inline-block; margin:0 6px;">
+    <img src="cid:icon-youtube" width="22" height="22" alt="YouTube" style="display:inline-block; border:0; vertical-align:middle;">
+  </a>
+</div>
+
+
+
+          <!-- Footer -->
+         
+          <div class="footer">
+  <div>© 2025, {{brand.company}} – alle Rechte vorbehalten.</div>
+  <div>{{brand.addr1}}<br>{{brand.addr2}}</div>
+  <div><a href="mailto:{{brand.email}}">{{brand.email}}</a></div>
+  <div><a href="{{brand.website}}" target="_blank" rel="noopener">{{brand.website}}</a></div>
+  <div style="margin-top:8px;">
+  <a href="{{unsubscribe.url}}" target="_blank" rel="noopener">Newsletter abmelden</a>
+</div>
+
+</div>
+
+
+
+
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+
+
+
+
+<!-- Wenn später Mailchim dann kannst du newsletter-herbst.html komplett entfernen und in der script/send/Test/Newsletter.js auch.
+ und in der.env sind daten hier siehe unten. -->
+
+ <!-- MAIL_SIGNOFF=Mit sportlichen Grüßen
+MAIL_SIGNER=Selcuk Kocyigit
+NEWSLETTER_EVENT_LOCATION=Trainingszentrum Duisburg
+NEWSLETTER_CTA_URL=https://www.muenchner-fussball-schule.ruhr/angebote
+SOCIAL_FACEBOOK_URL=https://www.facebook.com/muenchner.fussball.schule.ruhr
+SOCIAL_INSTAGRAM_URL=https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de
+SOCIAL_TIKTOK_URL=https://www.tiktok.com/@mfs_fussballtraining_nrw?
+SOCIAL_YOUTUBE_URL=https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA
+-->
