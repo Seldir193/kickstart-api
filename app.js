@@ -1,3 +1,6 @@
+
+
+
 // app.js
 'use strict';
 
@@ -14,7 +17,9 @@ const dns       = require('dns');
 
 // Bevorzugt IPv4 (hilft bei Windows/DNS/SRV)
 dns.setDefaultResultOrder('ipv4first');
+const publicNewsletter = require('./routes/publicNewsletter');
 
+//const publicRoutes = require('./routes/public');
 /* ========== App ========== */
 const app = express();
 app.set('trust proxy', 1); // falls später Proxy/Ingress davor sitzt
@@ -68,6 +73,14 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
+
+
+
+
+
+
+
+
 // Mongoose Settings
 mongoose.set('strictQuery', true);
 // Optional im Dev:
@@ -96,6 +109,7 @@ mongoose.set('strictQuery', true);
     }
 
     /* ========== Mount Routes ========== */
+    app.use('/api/public', publicNewsletter);
     app.use('/api/bookings',           bookingsRouter);
     app.use('/api/offers',             offersRouter);
     app.use('/api/admin/auth',         adminUsersRouter);
@@ -103,6 +117,10 @@ mongoose.set('strictQuery', true);
     app.use('/api/places',             placesRouter);
     app.use('/api/admin/datev', require('./routes/datev'));
 
+
+
+// …
+//app.use('/api/public', publicRoutes);
 
     // Admin Actions (cancel/storno/invoices auf Customer/Booking-Ebene)
     app.use('/api/admin/customers',    bookingActions);
@@ -143,5 +161,17 @@ mongoose.set('strictQuery', true);
 mongoose.connection.on('error', (err) => {
   console.error('Mongo runtime error:', err?.message);
 });
+
+
+
+
+
+
+
+
+
+
+
+
 
 
