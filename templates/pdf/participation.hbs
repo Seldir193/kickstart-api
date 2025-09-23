@@ -5,7 +5,6 @@
   <title>Teilnahmebestätigung und Rechnung – {{brand.company}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
-
 </head>
 <body>
 <main class="doc">
@@ -51,55 +50,87 @@
 
   <!-- POSITIONSBLOCK -->
   <table class="items" role="presentation">
-    <!-- Kopf: NUR Kursname + Zeitfenster -->
+    <!-- Kopf: Kursname + (nur bei Weeklies) Zeitfenster -->
     <tr>
       <td class="desc muted small">
         {{#if booking.offer}}{{booking.offer}}{{/if}}
-        {{#if booking.dayTimes}}
-          | Jeweils {{booking.dayTimes}}{{#if booking.timeDisplay}} von {{booking.timeDisplay}}{{/if}}
+        {{#if flags.isWeekly}}
+          {{#if booking.dayTimes}}
+            | Jeweils {{booking.dayTimes}}{{#if booking.timeDisplay}} von {{booking.timeDisplay}}{{/if}}
+          {{/if}}
         {{/if}}
       </td>
       <td class="amt"></td>
     </tr>
 
-    <!-- Zeile 1: erster Monat -->
-    <tr>
-      <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt)</td>
-      <td class="amt">
-        {{#if invoice.firstMonth}}
-          {{fmtMoney invoice.firstMonth invoice.currency}}
-        {{else if invoice.firstMonthAmount}}
-          {{fmtMoney invoice.firstMonthAmount invoice.currency}}
-        {{else if pricing.firstMonth}}
-          {{fmtMoney pricing.firstMonth pricing.currency}}
-        {{else}}
+    {{#if flags.isWeekly}}
+      <!-- WEEKLY: Zeile 1: erster Monat -->
+      <tr>
+        <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt)</td>
+        <td class="amt">
+          {{#if invoice.firstMonth}}
+            {{fmtMoney invoice.firstMonth invoice.currency}}
+          {{else if invoice.firstMonthAmount}}
+            {{fmtMoney invoice.firstMonthAmount invoice.currency}}
+          {{else if pricing.firstMonth}}
+            {{fmtMoney pricing.firstMonth pricing.currency}}
+          {{else}}
+            {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
+            {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
+            {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+          {{/if}}
+        </td>
+      </tr>
+
+      <!-- WEEKLY: Zeile 2: Monatsgebühr -->
+      <tr>
+        <td class="desc"><strong>Die monatliche Teilnahmegebühr beträgt</strong></td>
+        <td class="amt">
           {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
           {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
           {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
-        {{/if}}
-      </td>
-    </tr>
-
-    <!-- Zeile 2: Monatsgebühr (klar, ohne doppeltes Label) -->
-    <tr>
-      <td class="desc"><strong>Die monatliche Teilnahmegebühr beträgt</strong></td>
-      <td class="amt">
-        {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
-        {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
-        {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
-      </td>
-    </tr>
+        </td>
+      </tr>
+    {{else}}
+      <!-- NON-WEEKLY (Holiday/Personal/Club): eine einzige Zeile -->
+      <tr>
+        <td class="desc"><strong>Die Teilnahmegebühr beträgt</strong></td>
+        <td class="amt">
+          {{#if invoice.single}}
+            {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+            {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+            {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+            {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+        </td>
+      </tr>
+    {{/if}}
   </table>
 
   <div class="sep-line"></div>
 
-  <!-- Gesamt rechts (ohne „/ pro Monat“, damit keine doppelte Info) -->
+  <!-- Gesamt rechts -->
   <div class="total-line">
     <span class="label">Gesamt:</span>
     <span class="value">
-      {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
-      {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
-      {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+      {{#if flags.isWeekly}}
+        {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
+        {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
+        {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+      {{else}}
+        {{#if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+        {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+        {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+        {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+        {{/if}}
+      {{/if}}
     </span>
   </div>
 
@@ -160,8 +191,6 @@
 </main>
 </body>
 </html>
-
-
 
 
 
