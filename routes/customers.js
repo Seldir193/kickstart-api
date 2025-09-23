@@ -22,7 +22,10 @@ const { normalizeInvoiceNo } = require('../utils/pdfData');
 const Customer = require('../models/Customer');
 const Offer    = require('../models/Offer');
 
+const Booking  = require('../models/Booking'); // <-- hinzufügen
 
+
+const { syncCustomerNewsletter } = require('../services/marketingSync');
 
 
 const archiver = require('archiver');
@@ -37,6 +40,7 @@ const {
   sendCancellationEmail,
   sendStornoEmail,
   sendParticipationEmail,
+  
 } = require('../utils/mailer');
 
 const router = express.Router();
@@ -71,29 +75,27 @@ function getProviderObjectId(req) {
   if (!raw || !mongoose.isValidObjectId(raw)) return null;
   return new Types.ObjectId(raw);
 }
-function requireOwner(req, res) {
-  const owner = getProviderObjectId(req);
-  if (!owner) {
-    res.status(401).json({ ok: false, error: 'Unauthorized: invalid provider id' });
-    return null;
-  }
-  return owner;
-}
-function requireId(req, res) {
-  const id = String(req.params.id || '').trim();
-  if (!mongoose.isValidObjectId(id)) {
-    res.status(400).json({ error: 'Invalid customer id' });
-    return null;
-  }
-  return id;
-}
 
-/* ======= Filter builder (customers list) ======= */
+
+
+// routes/customers.js
 function buildFilter(query, owner) {
-  const { q, newsletter } = query || {};
+  const { q, newsletter, tab } = query || {};
   const filter = { owner };
-  if (newsletter === 'true') filter.newsletter = true;
-  if (newsletter === 'false') filter.newsletter = false;
+  const t = String(tab || '').toLowerCase();
+
+  if (t === 'newsletter') {
+    // reine Newsletter-Leads (keine Buchungen)
+    filter.newsletter = true;
+    filter['bookings.0'] = { $exists: false };
+  } else if (t === 'customers') {
+    // echte Kunden (mind. 1 Buchung) – newsletter-Filter HIER IGNORIEREN
+    filter['bookings.0'] = { $exists: true };
+  } else {
+    // Tab "all": optional nach Newsletter filtern
+    if (newsletter === 'true')  filter.newsletter = true;
+    if (newsletter === 'false') filter.newsletter = false;
+  }
 
   if (q && String(q).trim().length) {
     const needle = String(q).trim();
@@ -113,6 +115,9 @@ function buildFilter(query, owner) {
   }
   return filter;
 }
+
+
+
 
 /* ======= LIST ======= */
 router.get('/', async (req, res) => {
@@ -203,13 +208,26 @@ router.post('/', async (req, res) => {
   }
 });
 
-/* ======= UPDATE ======= */
-router.put('/:id', async (req, res) => {
+
+
+
+
+
+
+
+
+/* ======= UPDATE (vergibt userId falls noch keine existiert) ======= */
+async function updateCustomerHandler(req, res) {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
     const id = requireId(req, res); if (!id) return;
     const b = req.body || {};
 
+    // 1) Aktuellen Datensatz laden (wir müssen wissen, ob userId fehlt)
+    const current = await Customer.findOne({ _id: id, owner }).exec();
+    if (!current) return res.status(404).json({ error: 'Customer not found' });
+
+    // 2) Payload aus dem Dialog bauen (deine bisherige Logik)
     const update = {
       newsletter: !!b.newsletter,
       address: {
@@ -235,21 +253,43 @@ router.put('/:id', async (req, res) => {
       },
       notes: b.notes || '',
     };
-
     if (Array.isArray(b.bookings)) update.bookings = b.bookings;
 
+    // 3) Falls KEINE userId vorhanden → jetzt fortlaufende Nummer ziehen
+    if (current.userId == null) {
+      update.userId = await Customer.nextUserIdForOwner(owner);
+    }
+
+    // 4) Update anwenden & zurückgeben
     const doc = await Customer.findOneAndUpdate(
       { _id: id, owner },
       { $set: update },
       { new: true }
     ).lean();
 
-    if (!doc) return res.status(404).json({ error: 'Customer not found' });
-    res.json(doc);
-  } catch {
-    res.status(400).json({ error: 'Invalid customer id' });
+    return res.json(doc);
+  } catch (err) {
+    console.error('[customers:update] error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
-});
+}
+
+/* PUT & PATCH auf denselben Handler zeigen lassen */
+router.put('/:id', updateCustomerHandler);
+router.patch('/:id', updateCustomerHandler);
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ======= DELETE ======= */
 router.delete('/:id', async (req, res) => {
@@ -314,7 +354,46 @@ router.post('/:id/cancel', async (req, res) => {
   }
 });
 
-/* ======= Create booking (admin) ======= */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function requireOwner(req, res) {
+  const v = req.get('x-provider-id');
+  if (!v || !mongoose.isValidObjectId(v)) {
+    res.status(401).json({ ok: false, error: 'Unauthorized: missing/invalid provider' });
+    return null;
+  }
+  return new Types.ObjectId(v);
+}
+
+function requireId(req, res) {
+  const id = String(req.params.id || '').trim();
+  if (!mongoose.isValidObjectId(id)) {
+    res.status(400).json({ ok: false, error: 'Invalid id' });
+    return null;
+  }
+  return id;
+}
+
+
+/** Admin: interne Buchung hinzufügen */
 router.post('/:id/bookings', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
@@ -331,23 +410,51 @@ router.post('/:id/bookings', async (req, res) => {
     const customer = await Customer.findOne({ _id: id, owner });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
+    // 1) Subdoc im Customer speichern (mit Link auf zentrale Buchung)
     const bookingId = new Types.ObjectId();
+    const when = date ? new Date(date) : new Date();
+
     customer.bookings.push({
       _id: bookingId,
+      bookingId, // <--- wichtig
       offerId: offer._id,
       offerTitle: offer.title,
       offerType: offer.sub_type || offer.type || '',
       venue: offer.location || '',
-      date: date ? new Date(date) : new Date(),
+      date: when,
       status: 'active',
       createdAt: new Date(),
-      priceAtBooking: typeof offer.price === 'number' ? offer.price : undefined,
+      priceAtBooking: (typeof offer.price === 'number') ? offer.price : undefined,
     });
 
     const bookingSubdoc = customer.bookings.id(bookingId);
-
     await assignInvoiceData({ booking: bookingSubdoc, offer, providerId: String(owner) });
     await customer.save();
+
+    // 2) Zentrale Buchung in Booking-Collection anlegen
+    await Booking.create({
+      _id: bookingId,
+      source: 'admin_booking',
+      owner,
+      offerId: offer._id,
+      firstName: customer.child?.firstName || 'Vorname',
+      lastName:  customer.child?.lastName  || 'Nachname',
+      email:     customer.parent?.email     || `noemail+${bookingId}@example.com`,
+      age:       customer.child?.birthDate
+                   ? Math.max(5, Math.min(19,
+                       Math.floor((Date.now() - new Date(customer.child.birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                     ))
+                   : 10,
+      date:      when.toISOString().slice(0,10), // 'yyyy-mm-dd'
+      level:     'U12',
+      message:   customer.notes || '',
+      status:    'pending',
+      priceAtBooking: (typeof offer.price === 'number') ? offer.price : undefined,
+      // optional: Rechnungs-Snapshot aus Subdoc übernehmen, falls assignInvoiceData etwas gesetzt hat
+      invoiceNumber: bookingSubdoc?.invoiceNumber || undefined,
+      invoiceNo:     bookingSubdoc?.invoiceNo     || undefined,
+      invoiceDate:   bookingSubdoc?.invoiceDate   || undefined,
+    });
 
     return res.status(201).json({ ok: true, booking: bookingSubdoc.toObject() });
   } catch (err) {
@@ -355,6 +462,16 @@ router.post('/:id/bookings', async (req, res) => {
     return res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 /* ======= DOCUMENT PDFs (Next proxy ruft POST) ======= */
 router.post('/:id/bookings/:bid/documents/participation', async (req, res) => {
@@ -691,6 +808,25 @@ if (endAt && !booking.endDate) {
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ======= DOC: storno PDF ======= */
 router.post('/:id/bookings/:bid/documents/storno', async (req, res) => {
   try {
@@ -780,6 +916,21 @@ router.post('/:id/bookings/:bid/storno', async (req, res) => {
 
     await customer.save();
 
+    // zusätzlich: zentrale Booking-Collection updaten
+await Booking.findByIdAndUpdate(
+  booking._id,
+  {
+    $set: {
+      status: 'storno',
+      stornoNo: booking.stornoNo || formatStornoNo(),
+      stornoDate: new Date(),
+      stornoAmount: req.body?.amount ? Number(req.body.amount) : undefined,
+    },
+  },
+  { new: true }
+);
+
+
     return res.json({ ok: true, booking });
   } catch (err) {
     console.error(err);
@@ -857,6 +1008,21 @@ router.post('/:id/bookings/:bid/cancel', async (req, res) => {
         refInvoiceNo: referenceInvoice.number,
         refInvoiceDate: referenceInvoice.date,
       });
+
+      // zusätzlich: zentrale Booking-Collection updaten
+await Booking.findByIdAndUpdate(
+  booking._id,
+  {
+    $set: {
+      status: 'cancelled',
+      cancellationNo: booking.cancellationNo,
+      cancellationDate: booking.cancelDate,
+      cancellationReason: booking.cancelReason,
+    },
+  },
+  { new: true }
+);
+
 
       await sendCancellationEmail({
         to: customer.parent.email,
@@ -1473,17 +1639,57 @@ router.get('/:id/documents.zip', async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+router.patch('/:id/newsletter', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const want = !!req.body?.newsletter;
+
+    const providerId =
+      req.headers['x-provider-id'] ||
+      req.user?.providerId || null;
+
+    const filter = providerId ? { _id: id, providerId } : { _id: id };
+    const doc = await Customer.findOne(filter);
+    if (!doc) return res.status(404).json({ ok: false, error: 'Customer not found' });
+
+ 
+     doc.newsletter = want;
+   if (want && !doc.marketingConsentAt) {
+     doc.marketingConsentAt = new Date();
+   }
+
+    const r = await syncCustomerNewsletter(doc, want, { mutate: true });
+    if (r?.ok === false) {
+      return res.status(400).json({ ok: false, error: r.error || 'Sync failed' });
+    }
+
+
+     //if (!doc.marketingLastSyncedAt) doc.marketingLastSyncedAt = new Date();
+
+    
+    await doc.save();
+   
+    const fresh = await Customer.findById(doc._id).lean();
+     res.json({ ok: true, customer: fresh });
+  } catch (err) {
+    console.error('PATCH /customers/:id/newsletter failed:', err);
+    res.status(500).json({ ok: false, error: 'Newsletter update failed' });
+  }
+});
+
+
+
+
+
 module.exports = router;
-
-
-
-
-
-
-
-
-
-
-
-
-
