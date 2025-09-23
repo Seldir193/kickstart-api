@@ -63,7 +63,11 @@
         <mj-spacer height="6px" />
         <mj-text padding="0 24px">
           <b>Programm:</b> {{booking.program}}<br/>
-          <b>Datum:</b> {{booking.date}}
+          <b>Datum:</b> {{booking.date}}<br/>
+
+ {{#if booking.childFull}}<b>Kind:</b> {{booking.childFull}}<br/>{{/if}}
+      {{#if booking.dayTimes}}<b>Kurstag:</b> {{booking.dayTimes}}<br/>{{/if}}
+      {{#if booking.timeDisplay}}<b>Kurszeit:</b> {{booking.timeDisplay}}{{/if}}
         </mj-text>
       </mj-column>
     </mj-section>
