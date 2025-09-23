@@ -56,7 +56,8 @@
     {{#if invoice.refInvoiceDate}} vom {{invoice.refInvoiceDate}}{{/if}}<br/>
   {{/if}}
 
-          {{#if invoice.offer}}<b>Angebot:</b> {{invoice.offer}}{{/if}}
+          {{#if invoice.offer}}<b>Angebot:</b> {{courseOnly  invoice.offer}}{{/if}}<br/>
+           
         </mj-text>
       </mj-column>
     </mj-section>
