@@ -113,6 +113,63 @@ async function sendMail({ to, subject, text, html, attachments = [], cc, bcc }) 
 
 
 
+
+
+
+
+
+
+// === Helfer: Kursname ohne Adresse/Ortsteile ===
+function courseOnly(raw) {
+  if (!raw) return '';
+  let s = String(raw).trim();
+  s = s.split(/\s*(?:[•|]|—|–)\s*/)[0];     // an •, —, – oder | trennen
+  const commaDigit = s.search(/,\s*\d/);    // hinter ", 123…" abschneiden
+  if (commaDigit > 0) s = s.slice(0, commaDigit);
+  const dashAddr = s.search(/\s-\s*\d/);    // hinter " - 123…" abschneiden
+  if (dashAddr > 0) s = s.slice(0, dashAddr);
+  return s.trim();
+}
+
+
+function parseInquiryMessage(msg) {
+  const t = String(msg || '');
+  const pick = (label) => {
+    const m = t.match(new RegExp(`${label}\\s*:\\s*([^\\n]+)`, 'i'));
+    return m ? m[1].trim() : '';
+  };
+
+  // Rohinhalt hinter "Kind:" holen
+  let childRaw = pick('Kind');
+
+  // Alles abschneiden, wenn danach weitere Felder kommen (", Geburtstag:", ", Kontakt:", …)
+  childRaw = childRaw.replace(
+    /\s*,\s*(Geburts(tag|datum)|Kontakt|Adresse|Telefon|Gutschein|Quelle)\s*:.*/i,
+    ''
+  ).trim();
+
+  // Optional: Geschlecht in Klammern extrahieren, aber aus dem Namen entfernen
+  const genderMatch = childRaw.match(/\(([^)]+)\)/);
+  const gender = genderMatch ? genderMatch[1].trim() : '';
+  const child  = childRaw.replace(/\s*\([^)]*\)\s*$/, '').trim();
+
+  return {
+    child,                   // ← nur der Name
+    gender,                  // z.B. "weiblich" (falls gewünscht)
+    birthdate: pick('Geburtstag') || pick('Geburtsdatum'),
+    contact  : pick('Kontakt'),
+    address  : pick('Adresse'),
+    phone    : pick('Telefon'),
+    voucher  : pick('Gutschein'),
+    source   : pick('Quelle'),
+  };
+}
+
+
+
+
+
+
 /* ================= Buchungs-MJML (unverändert) ================= */
 
 async function sendBookingAckEmail({ to, offer, booking, pro }) {
@@ -128,33 +185,42 @@ async function sendBookingAckEmail({ to, offer, booking, pro }) {
       }).format(new Date(booking.date))
     : '';
 
-  const ctx = {
-    brand: { ...brand, logoUrl },
-    title: 'Eingangsbestätigung deiner Buchungsanfrage',
-    greetingName: booking.firstName || 'Sportler',
-    summary: {
-     // offer: offer?.title || `${offer?.type ?? ''} ${offer?.location ? '• ' + offer.location : ''}`.trim(),
-     //offer: offer?.title || `${offer?.sub_type ?? offer?.type ?? ''}${offer?.location ? ' • ' + offer.location : ''}`.trim(),
-     offer: offer?.title || `${(offer?.sub_type || offer?.type || '')}${offer?.location ? ' • ' + offer.location : ''}`,
-      date: dateDE,
-      //date: booking.date,
-      level: booking.level,
-      age: booking.age,
-      message: booking.message || '',
-    },
-    price: {
-      monthly: pro?.monthlyPrice != null ? eur(pro.monthlyPrice) : '',
-      firstMonth: pro?.firstMonthPrice != null ? eur(pro.firstMonthPrice) : '',
-      startDate: dateDE,
-     // startDate: booking.date,
-    },
-    signature: {
-      signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
-      name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
-    },
-  };
 
-  const html = renderMjmlFile('templates/emails/booking-ack.mjml', ctx);
+
+    // … innerhalb sendBookingAckEmail …
+
+const rawOffer =
+  offer?.title ||
+  `${(offer?.sub_type || offer?.type || '')}${offer?.location ? ' • ' + offer.location : ''}`;
+
+const summaryMessage = booking?.message || '';          // was bisher unter "Nachricht" stand
+const form = parseInquiryMessage(summaryMessage);       // strukturierte Felder herausziehen
+
+const ctx = {
+  brand: { ...brand, logoUrl },
+  title: 'Eingangsbestätigung deiner Buchungsanfrage',
+  greetingName: booking.firstName || 'Sportler',
+  summary: {
+    // NUR Kursname – ohne Adresse/Ort
+    offer: courseOnly(rawOffer),
+    date: dateDE,
+    level: booking.level,
+    age: booking.age,
+    // message NICHT mehr verwenden (wir zeigen unten die aufbereiteten Felder)
+  },
+  // neue, strukturierte Formular-Felder für das MJML
+  form,
+  signature: {
+    signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
+    name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
+  },
+};
+
+const html = renderMjmlFile('templates/emails/booking-ack.mjml', ctx);
+
+
+
+  
   const attachments = logoAttachment ? [logoAttachment] : [];
   await sendMail({ to, subject: 'Eingangsbestätigung – deine Buchungsanfrage', html, text: '', attachments });
 }
@@ -531,12 +597,12 @@ const addressLine  = [addressLine1, addressLine2].filter(Boolean).join(', ')
 
 
 // ---- Termin bestätigt – E-Mail mit optionalem PDF-Anhang ----
-async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
+async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
   if (!to) return;
 
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
 
-   const dateDE = booking?.date
+  const dateDE = booking?.date
     ? new Intl.DateTimeFormat('de-DE', {
         timeZone: 'Europe/Berlin',
         day: '2-digit',
@@ -545,7 +611,85 @@ async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
       }).format(new Date(booking.date))
     : '';
 
+  // Wochentag aus dem Buchungsdatum (Fallback für Kurstag)
+  const weekdayDE = (() => {
+    const s = booking?.date ? String(booking.date) : '';
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : (s ? new Date(s) : null);
+    return d && !Number.isNaN(d.getTime())
+      ? new Intl.DateTimeFormat('de-DE', { weekday: 'long' }).format(d)
+      : '';
+  })();
+
+  // Zeit aus Offer extrahieren (falls im Booking keine Uhrzeit steht)
+  function findTimeRangeFromOffer(off, weekdayName) {
+    if (!off) return '';
+
+    const joinRange = (from, to) => {
+      const f = from ? String(from).trim() : '';
+      const t = to   ? String(to).trim()   : '';
+      return [f, t].filter(Boolean).join(' – ');
+    };
+
+    if (Array.isArray(off.days) && off.days.length) {
+      const norm = (v) => String(v || '').toLowerCase();
+      const weekdayNorm = norm(weekdayName);
+
+      // passendes Objekt nach Wochentag, sonst erstes Element
+      let cand = off.days.find(d =>
+        norm(d?.day) === weekdayNorm ||
+        norm(d?.weekday) === weekdayNorm ||
+        norm(d?.tag) === weekdayNorm
+      ) || off.days[0];
+
+      if (cand && typeof cand === 'object') {
+        const from =
+          cand.timeFrom ?? cand.from ?? cand.start ??
+          (cand.time && (cand.time.from ?? cand.timeStart));
+        const to =
+          cand.timeTo   ?? cand.to   ?? cand.end   ??
+          (cand.time && (cand.time.to ?? cand.timeEnd));
+
+        if (from || to) return joinRange(from, to);
+
+        const t = cand.time ?? cand.zeit ?? cand.uhrzeit;
+        if (t) return String(t).replace(/\s*-\s*/g, ' – ').trim();
+      }
+    }
+
+    // root-Felder
+    const from = off.timeFrom ?? off.from ?? off.start;
+    const to   = off.timeTo   ?? off.to   ?? off.end;
+    if (from || to) return joinRange(from, to);
+
+    const t = off.time ?? off.zeit ?? off.uhrzeit;
+    return t ? String(t).replace(/\s*-\s*/g, ' – ').trim() : '';
+  }
+
+  // ⚙️ Child + Tag + Zeit (mit robusten Fallbacks)
+  const childFull =
+    booking.childName ||
+    [booking.childFirstName, booking.childLastName].filter(Boolean).join(' ') ||
+    [booking.firstName, booking.lastName].filter(Boolean).join(' ') ||   // ← dein Booking hat diese Felder
+    booking.child ||
+    '';
+
+  const dayTimes =
+    booking.dayTimes ||
+    booking.kurstag ||
+    booking.weekday ||
+    weekdayDE ||
+    '';
+
+  const timeDisplay =
+    booking.timeDisplay ||
+    booking.kurszeit ||
+    booking.time ||
+    booking.uhrzeit ||
+    findTimeRangeFromOffer(offer, weekdayDE) ||
+    '';
+
   const subject = `Termin bestätigt – ${booking.level || 'Kurs'} am ${booking.date || ''}`;
+
   const ctx = {
     brand: { ...brand, logoUrl },
     title: 'Terminbestätigung',
@@ -553,8 +697,10 @@ async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
     booking: {
       program: booking.program || booking.level || 'Buchung',
       date: dateDE,
-     // date: booking.date || '',
       code: booking.confirmationCode || '',
+      childFull,
+      dayTimes,
+      timeDisplay,
     },
     message: 'Im Anhang findest du die Terminbestätigung als PDF.',
     signature: {
@@ -571,6 +717,7 @@ async function sendBookingConfirmedEmail({ to, booking, pdfBuffer }) {
 
   await sendMail({ to, subject, html, attachments, text: '' });
 }
+
 
 
 
