@@ -2,13 +2,30 @@
 'use strict';
 
 const { Schema, model, Types, models } = require('mongoose');
-
 const { normalizeInvoiceNo } = require('../utils/pdfData');
+
 /**
- * Optionales, separates Booking-Model (falls außerhalb von Customer benötigt).
- * Enthält parallele Felder zu den PDF-/Billing-Workflows.
+ * Normalisiert Rechnungs-/Dokumentnummern.
+ * - null/undefined/""  -> undefined (Feld wird nicht gespeichert)
+ * - sonst: normalizeInvoiceNo (falls vorhanden) + trim
  */
+function invoiceSetter(v) {
+  const s = (typeof normalizeInvoiceNo === 'function') ? normalizeInvoiceNo(v) : v;
+  if (s == null) return undefined;
+  const t = String(s).trim();
+  return t || undefined;
+}
+
 const BookingSchema = new Schema({
+  /* Herkunft/Quelle der Buchung/Anfrage */
+  source: {
+    type: String,
+    enum: ['online_request', 'admin_booking'],
+    required: true,
+    default: 'online_request',
+    index: true,
+  },
+
   /* Tenant / Provider */
   owner:   { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true },
 
@@ -21,7 +38,6 @@ const BookingSchema = new Schema({
   email:     { type: String, required: true, trim: true, lowercase: true, match: /.+@.+\..+/ },
   age:       { type: Number, required: true, min: 5, max: 19 },
 
-  // Hinweis: historisch als String 'yyyy-mm-dd' genutzt – belassen für Kompatibilität
   date:      { type: String, required: true }, // 'yyyy-mm-dd'
   level:     { type: String, enum: ['U8','U10','U12','U14','U16','U18'], required: true },
   message:   { type: String, default: '' },
@@ -38,36 +54,32 @@ const BookingSchema = new Schema({
   adminNote:   { type: String, default: '' },
 
   /* Accounting / Preise */
-  priceAtBooking: { type: Number }, // z. B. 65.00
+  priceAtBooking: { type: Number },
 
-  /* Rechnung (bei Bestätigung) */
- // invoiceNumber: { type: String, unique: true, sparse: true, index: true },
-  //invoiceNo:     { type: String, default: '' }, // Alias/Legacy (nicht unique)
-
-  invoiceNumber: { type: String, set: normalizeInvoiceNo, trim: true }, // kanonisch
-  invoiceNo:     { type: String, set: normalizeInvoiceNo, trim: true }, 
+  /* Rechnung */
+  invoiceNumber: { type: String, set: invoiceSetter, trim: true },
+  invoiceNo:     { type: String, set: invoiceSetter, trim: true },
   invoiceDate:   { type: Date },
 
   /* Kündigung */
-  //cancellationNumber: { type: String, unique: true, sparse: true, index: true },
-//  cancellationNo:     { type: String, default: '' }, // Alias (nicht unique)
-
-  cancellationNumber: { type: String, set: normalizeInvoiceNo, trim: true },
-  cancellationNo:     { type: String, set: normalizeInvoiceNo, trim: true },
+  // cancellationNumber: { type: String, set: invoiceSetter, trim: true },
+  cancellationNo:     { type: String, set: invoiceSetter, trim: true },
   cancellationDate:   { type: Date },
   cancellationReason: { type: String, default: '' },
 
   /* Storno */
-  //stornoNumber: { type: String, unique: true, sparse: true, index: true },
-  //stornoNo:     { type: String, default: '' }, // Alias (nicht unique)
-
-  stornoNumber: { type: String, set: normalizeInvoiceNo, trim: true },
-  stornoNo:     { type: String, set: normalizeInvoiceNo, trim: true },
+  stornoNumber: { type: String, set: invoiceSetter, trim: true },
+  stornoNo:     { type: String, set: invoiceSetter, trim: true },
   stornoDate:   { type: Date },
-  stornoAmount: { type: Number }, // z. B. 50.00
+  stornoAmount: { type: Number },
+
+  newsletterToken:        { type: String, default: null },
+newsletterTokenExpires: { type: Date,   default: null },
+newsletterUnsubToken:   { type: String, default: null },
+
 }, { timestamps: true });
 
-/* Virtuals (Kompatibilität) */
+/* Virtuelle Felder */
 BookingSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
 });
@@ -76,31 +88,21 @@ BookingSchema.virtual('program').get(function () {
 });
 
 /* Indexe */
-//BookingSchema.index({ owner: 1, createdAt: -1 });
-//BookingSchema.index({ status: 1, createdAt: -1 });
-
-
-
-
-
-
-
-
 BookingSchema.index({ owner: 1, createdAt: -1 });
 BookingSchema.index({ status: 1, createdAt: -1 });
 
-BookingSchema.index({ owner: 1, invoiceNumber: 1 },     { unique: true, sparse: true });
-BookingSchema.index({ owner: 1, cancellationNumber: 1 },{ unique: true, sparse: true });
-BookingSchema.index({ owner: 1, stornoNumber: 1 },      { unique: true, sparse: true });
+/**
+ * WICHTIG:
+ * Partial-Unique-Index, damit mehrere Dokumente ohne invoiceNumber erlaubt sind.
+ * Greift nur, wenn invoiceNumber existiert und NICHT leer ist.
+ */
+BookingSchema.index(
+  { owner: 1, invoiceNumber: 1 },
+  { unique: true, partialFilterExpression: { invoiceNumber: { $exists: true, $gt: '' } } }
+);
 
-
-
-
+// export
 module.exports = models.Booking || model('Booking', BookingSchema);
-
-
-
-
 
 
 
