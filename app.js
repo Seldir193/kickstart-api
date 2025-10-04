@@ -1,6 +1,3 @@
-
-
-
 // app.js
 'use strict';
 
@@ -28,6 +25,12 @@ app.set('trust proxy', 1); // falls später Proxy/Ingress davor sitzt
 app.use(helmet());
 app.use(express.json({ limit: '5mb' }));
 
+
+
+app.use('/api/admin/revenue', require('./routes/adminRevenue'));
+app.use('/api/admin/revenue-derived', require('./routes/adminRevenueDerived'));
+
+
 /* ========== CORS ========== */
 // Mehrere Origins kommasepariert in CORS_ORIGIN
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost')
@@ -51,6 +54,9 @@ app.use('/api/', rateLimit({ windowMs: 60_000, max: 60 }));
 app.get('/api/ping',   (_req, res) => res.json({ ok: true, msg: 'API up' }));
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+
+
+
 /* ========== SMTP Health (optional) ========== */
 const { verifySmtp } = require('./utils/mailer');
 
@@ -73,14 +79,6 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-
-
-
-
-
-
-
-
 // Mongoose Settings
 mongoose.set('strictQuery', true);
 // Optional im Dev:
@@ -91,7 +89,7 @@ mongoose.set('strictQuery', true);
     await mongoose.connect(MONGO_URI, {
       serverSelectionTimeoutMS: 10_000, // schnellere Rückmeldung
       // dbName nur setzen, wenn NICHT in der URI enthalten:
-      // dbName: 'kickstart',
+      dbName: 'test',
     });
     console.log('✅ MongoDB connected');
 
@@ -116,8 +114,6 @@ mongoose.set('strictQuery', true);
     app.use('/api/customers',          customersRouter);
     app.use('/api/places',             placesRouter);
     app.use('/api/admin/datev', require('./routes/datev'));
-
-
 
 // …
 //app.use('/api/public', publicRoutes);
@@ -161,9 +157,6 @@ mongoose.set('strictQuery', true);
 mongoose.connection.on('error', (err) => {
   console.error('Mongo runtime error:', err?.message);
 });
-
-
-
 
 
 
