@@ -1,9 +1,17 @@
 // routes/adminUsers.js
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const AdminUser = require('../models/AdminUser');
 
+const adminAuth = require('../middleware/adminAuth');
+
 const router = express.Router();
+
+const { sendPasswordResetMail } = require('../utils/mailer');
+
+const { Types } = require('mongoose');
+const isValidId = (s) => typeof s === 'string' && Types.ObjectId.isValid(s);
 
 // routes/adminUsers.js
 router.post('/signup', async (req, res) => {
@@ -76,5 +84,194 @@ router.get('/', async (_req, res) => {
     .sort({ createdAt: -1 });
   res.json({ ok: true, users });
 });
+
+
+
+
+
+
+
+
+
+
+
+router.get('/profile', adminAuth, async (req, res) => {
+  try {
+    const q = req.query || {};
+    const effId = (q.id || req.providerId || '').toString().trim();
+    const email = (q.email || '').toString().trim().toLowerCase();
+
+    let user = null;
+    if (effId) {
+      if (!isValidId(effId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid id format' });
+      }
+      user = await AdminUser.findById(effId).lean();
+    } else if (email) {
+      user = await AdminUser.findOne({ email }).lean();
+    } else {
+      return res.status(400).json({ ok: false, error: 'id or email required' });
+    }
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'User not found' });
+    }
+
+    return res.json({
+      ok: true,
+      user: {
+        id: String(user._id),
+        fullName: user.fullName,
+        email: user.email,
+        avatarUrl: user.avatarUrl || null,
+      },
+    });
+  } catch (e) {
+    console.error('[GET /profile] error:', e);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+// --- POST /api/admin/auth/profile ---
+router.post('/profile', adminAuth, async (req, res) => {
+  try {
+    const { id: bodyId, email, fullName, avatar } = req.body || {};
+    const effId = (bodyId || req.providerId || '').toString().trim();
+
+    let user = null;
+    if (effId) {
+      if (!isValidId(effId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid id format' });
+      }
+      user = await AdminUser.findById(effId);
+    } else if (email) {
+      user = await AdminUser.findOne({ email: String(email).trim().toLowerCase() });
+    } else {
+      return res.status(400).json({ ok: false, error: 'id or email required' });
+    }
+
+    if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
+
+    if (typeof fullName === 'string') user.fullName = fullName.trim();
+
+    if (typeof email === 'string' && email.trim()) {
+      const next = String(email).trim().toLowerCase();
+      if (next !== user.email) {
+        const exists = await AdminUser.findOne({ email: next });
+        if (exists) return res.status(409).json({ ok: false, error: 'Email already in use' });
+        user.email = next;
+      }
+    }
+
+    if (typeof avatar === 'string' && avatar.startsWith('data:')) {
+      user.avatarUrl = avatar; // dev: Data-URL speichern
+    }
+
+    await user.save();
+    return res.json({
+      ok: true,
+      user: {
+        id: String(user._id),
+        fullName: user.fullName,
+        email: user.email,
+        avatarUrl: user.avatarUrl || null,
+      },
+    });
+  } catch (e) {
+    console.error('[POST /profile] error:', e);
+    return res.status(500).json({ ok: false, error: 'Update failed' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.post('/forgot', async (req, res, next) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ ok: false, error: 'Invalid email' });
+    }
+
+    const user = await AdminUser.findOne({ email }).exec();
+
+    // Generate token (plain) – for production prefer hashing the token
+    if (user) {
+      const token = crypto.randomBytes(32).toString('hex');
+      user.resetToken = token;
+      user.resetTokenExp = new Date(Date.now() + 60 * 60 * 1000); // 1h
+      await user.save();
+
+      const base = process.env.FRONTEND_BASE_URL || 'http://localhost:3000';
+      const link = `${base}/admin/new-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+
+      // send email (non-blocking)
+      sendPasswordResetMail(email, link).catch(err =>
+        console.error('[mailer] reset mail failed:', err?.message || err)
+      );
+    }
+
+    // Always OK (so attackers can't probe which emails exist)
+    return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/auth/reset
+ * Body: { token, password }
+ */
+router.post('/reset', async (req, res, next) => {
+  try {
+    const token = String(req.body?.token || '').trim();
+    const password = String(req.body?.password || '');
+    if (!token) return res.status(400).json({ ok: false, error: 'Missing token' });
+    if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password too short' });
+
+    const user = await AdminUser.findOne({
+      resetToken: token,
+      resetTokenExp: { $gt: new Date() },
+    }).exec();
+
+    if (!user) {
+      return res.status(400).json({ ok: false, error: 'Invalid or expired token' });
+    }
+
+    // hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(password, salt);
+
+    // clear reset fields
+    user.resetToken = undefined;
+    user.resetTokenExp = undefined;
+
+    await user.save();
+    return res.json({ ok: true, message: 'Password updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+
+
+
 
 module.exports = router;
