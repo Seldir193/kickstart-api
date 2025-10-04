@@ -12,8 +12,14 @@ const AdminUserSchema = new Schema(
       lowercase: true,
       unique: true,
       match: /.+@.+\..+/
+
     },
     passwordHash: { type: String, required: true },
+    avatarUrl: { type: String, default: null }, // <— NEU
+
+
+     resetToken: { type: String, index: true },
+  resetTokenExp: { type: Date },
   },
   { timestamps: true }
 );
