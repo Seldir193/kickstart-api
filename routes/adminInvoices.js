@@ -28,6 +28,7 @@ function requireOwner(req, res) {
   return new Types.ObjectId(raw);
 }
 
+
 /* ---------- utils ---------- */
 function parseBool(v, def = false) { if (v == null) return def; const s = String(v).toLowerCase(); return s === '1' || s === 'true' || s === 'yes'; }
 function clamp(n, min, max) { n = Number(n); if (!Number.isFinite(n)) return min; return Math.max(min, Math.min(max, n)); }
@@ -397,6 +398,19 @@ router.get('/zip', async (req, res) => {
     res.status(500).json({ ok:false, error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
