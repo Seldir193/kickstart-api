@@ -585,6 +585,7 @@ router.post('/:id/bookings/:bid/email/storno', async (req, res) => {
       refInvoiceDate: effectiveRefDate,
     });
 
+
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
