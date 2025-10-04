@@ -725,6 +725,74 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// --- Password reset email (forgot) ---
+async function sendPasswordResetMail(to, resetLink) {
+  if (!to || !resetLink) return;
+
+  const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
+
+  // Try MJML template first; fallback to simple HTML if template missing
+  let html;
+  try {
+    html = renderMjmlFile('templates/emails/password-reset.mjml', {
+      brand: { ...brand, logoUrl },
+      title: 'Passwort zurücksetzen',
+      intro: 'Wir haben eine Anfrage erhalten, dein Passwort zurückzusetzen.',
+      ctaText: 'Neues Passwort festlegen',
+      resetLink,
+      note: 'Dieser Link ist 1 Stunde gültig. Wenn du die Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.',
+      signature: {
+        signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
+        name: process.env.MAIL_SIGNER || 'Selcuk Kocyigit',
+      },
+    });
+  } catch {
+    // Minimal fallback HTML without MJML
+    html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;color:#111827">
+        <p>Hallo,</p>
+        <p>wir haben eine Anfrage erhalten, dein Passwort zurückzusetzen.</p>
+        <p><a href="${resetLink}" style="display:inline-block;padding:10px 14px;background:#111;color:#fff;border-radius:8px;text-decoration:none">Neues Passwort festlegen</a></p>
+        <p>Oder öffne den folgenden Link:<br><a href="${resetLink}">${resetLink}</a></p>
+        <p>Dieser Link ist 1 Stunde gültig. Wenn du die Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.</p>
+        <p>${process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen'}<br/>${process.env.MAIL_SIGNER || 'Selcuk Kocyigit'}</p>
+      </div>
+    `;
+  }
+
+  const attachments = logoAttachment ? [logoAttachment] : [];
+  await sendMail({
+    to,
+    subject: (process.env.APP_NAME || 'KickStart Academy') + ' • Passwort zurücksetzen',
+    html,
+    text: '', // optional: plain text, wenn du möchtest
+    attachments,
+  });
+}
+
+
+
+
+
+
+
+
 /** Storno-Rechnung */
 async function sendStornoEmail({ to, customer, booking, offer, pdfBuffer, amount, currency = 'EUR' }) {
   if (!to) return;
@@ -1039,6 +1107,7 @@ module.exports = {
   sendCancellationEmail,
   sendStornoEmail,
 
+  sendPasswordResetMail,
   // Legacy
   sendBookingConfirmationEmail,
 };
