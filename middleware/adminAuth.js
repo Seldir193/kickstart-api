@@ -4,6 +4,8 @@
 // 2) X-Provider-Id      -> req.providerId = <id>
 
 module.exports = function adminAuth(req, res, next) {
+  console.log('[adminAuth] x-provider-id =', req.get('x-provider-id') || '(none)');
+
   try {
     const auth = req.headers.authorization || '';
 
