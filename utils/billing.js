@@ -68,6 +68,9 @@ function normCurrency(c) {
   return String(c || 'EUR').toUpperCase();
 }
 
+
+
+
 /* ---------- Nummern-/Daten-Zuweisung ---------- */
 async function assignInvoiceData({ booking, offer, providerId = '1' }) {
   //const code =
@@ -87,6 +90,7 @@ async function assignInvoiceData({ booking, offer, providerId = '1' }) {
   await persistBooking(booking);
   return booking;
 }
+
 
 async function assignCancellationData({
   booking,
