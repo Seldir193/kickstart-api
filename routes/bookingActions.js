@@ -28,6 +28,7 @@ const router = express.Router();
 
 
 
+
 /* -------- Provider/Owner helpers (Header: x-provider-id) -------- */
 function getProviderIdRaw(req) {
   const v = req.get('x-provider-id');
@@ -115,6 +116,20 @@ router.post('/:cid/bookings/:bid/cancel', async (req, res) => {
 });
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ===================== STORNO ===================== */
 router.post('/:cid/bookings/:bid/storno', async (req, res) => {
   try {
@@ -175,6 +190,15 @@ router.post('/:cid/bookings/:bid/storno', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
 
 
 
