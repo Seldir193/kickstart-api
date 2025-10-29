@@ -15,6 +15,8 @@ const {
   sendBookingProcessingEmail,
   sendBookingCancelledEmail,
   sendBookingConfirmedEmail,
+   sendBookingCancelledConfirmedEmail
+  
 } = require('../utils/mailer');
 
 const router = express.Router();
@@ -404,6 +406,70 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
     return res.status(500).json({ ok:false, error:'Server error' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// routes/bookings.js  — NEU
+router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
+  try {
+    const ownerId = resolveOwner(req);
+    if (!ownerId) return res.status(500).json({ ok:false, error:'DEFAULT_OWNER_ID missing/invalid' });
+
+    const id = String(req.params.id || '').trim();
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ ok:false, error:'Invalid booking id' });
+    }
+
+    const booking = await Booking.findOne({ _id: id, owner: ownerId });
+    if (!booking) return res.status(404).json({ ok:false, error:'Not found' });
+
+    // Nur erlaubt, wenn aktuell 'confirmed'
+    if (booking.status !== 'confirmed') {
+      return res.status(409).json({ ok:false, code:'NOT_CONFIRMED', error:'Only confirmed bookings can be cancelled via this route' });
+    }
+
+    // Status -> cancelled
+    booking.status = 'cancelled';
+    booking.cancelledAt = new Date();
+    await booking.save();
+
+    const offer = booking.offerId
+      ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
+      : null;
+
+    try {
+      await sendBookingCancelledConfirmedEmail({ to: booking.email, booking, offer });
+      return res.json({ ok:true, booking, mailSent:true });
+    } catch (e) {
+      console.error('[bookings:cancel-confirmed] mail failed:', e?.message || e);
+      return res.status(200).json({ ok:true, booking, mailSent:false, error:'mail_failed' });
+    }
+  } catch (err) {
+    console.error('[bookings:cancel-confirmed] error:', err);
+    return res.status(500).json({ ok:false, error:'Server error' });
+  }
+});
+
+
+
 
 module.exports = router;
 
