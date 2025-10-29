@@ -1,0 +1,121 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" color="#111827" />
+      <mj-text font-size="14px" line-height="22px" />
+      <mj-section background-color="#ffffff" padding="0px" />
+      <mj-divider border-color="#e5e7eb" border-width="1px" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f5f7fb">
+    <!-- Header -->
+    <mj-section background-color="#3e6294" padding="12px 24px">
+      <mj-column>
+        <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0 0 6px 0" align="center" />
+        <mj-text font-size="18px" font-weight="700" align="center" padding="0" color="#ffffff">
+          {{brand.company}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="0 24px">
+      <mj-column><mj-divider /></mj-column>
+    </mj-section>
+
+    <!-- Intro -->
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          Hallo {{greetingName}}.
+        </mj-text>
+        <mj-spacer height="10px" />
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          Leider müssen wir deinen <b>bereits bestätigten Termin</b> absagen.
+          Wir bitten die Unannehmlichkeiten zu entschuldigen.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Details -->
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">Termin-Details</mj-text>
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">
+          {{#if booking.program}}<b>Kurs:</b> {{booking.program}}<br/>{{/if}}
+          {{#if dateDE}}<b>Datum:</b> {{dateDE}}<br/>{{/if}}
+          {{#if booking.dayTimes}}<b>Tag:</b> {{booking.dayTimes}}<br/>{{/if}}
+          {{#if booking.timeDisplay}}<b>Uhrzeit:</b> {{booking.timeDisplay}}<br/>{{/if}}
+          {{#if confirmationCode}}<b>Bestätigungscode:</b> {{confirmationCode}}{{/if}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Optionaler Text -->
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text padding="0 24px">
+          Wenn du möchtest, schlagen wir dir gerne Alternativtermine vor. Antworte einfach auf diese E-Mail.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Gruß -->
+    <mj-section background-color="#ffffff" padding="20px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
+          {{signature.signoff}},<br/>{{signature.name}}<br/>
+          <strong>Dein Trainer-Team</strong><br/>
+        </mj-text>
+        <mj-divider />
+      </mj-column>
+    </mj-section>
+
+    <!-- Social -->
+    <mj-section background-color="#ffffff" padding="8px 0 0">
+      <mj-column>
+        <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
+          <mj-social-element name="facebook" href="https://www.facebook.com/muenchner.fussball.schule.ruhr" />
+          <mj-social-element name="instagram" href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de" />
+          <mj-social-element name="web" href="https://www.tiktok.com/@mfs_fussballtraining_nrw?" />
+          <mj-social-element name="youtube" href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#f3f4f6" padding="12px 24px 16px">
+      <mj-column>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="0 0 8px 0">
+          © 2025, {{brand.company}} – alle Rechte vorbehalten.
+        </mj-text>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="0">
+          {{brand.addr1}}<br/>{{brand.addr2}}
+        </mj-text>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="8px 0 0">
+          Telefon: <a href="tel:+4917643203362" style="color:#0f172a; text-decoration:none;">0176 4320 3362</a>
+        </mj-text>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 0 0">
+          E-Mail: <a href="mailto:{{brand.email}}" style="color:#0f172a; text-decoration:none;">{{brand.email}}</a>
+        </mj-text>
+        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 0 0">
+          Website: <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
+
+
+
+
+
+
+
+
+
+
+
+
+
