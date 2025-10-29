@@ -1090,6 +1090,55 @@ const endDateDE  = endDateRaw ? new Intl.DateTimeFormat('de-DE').format(new Date
 
 
 
+
+
+
+// utils/mailer.js  — NEU
+async function sendBookingCancelledConfirmedEmail({ to, booking, offer }) {
+  if (!to) return;
+
+  const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
+
+  const dateDE = booking?.date
+    ? new Intl.DateTimeFormat('de-DE', {
+        timeZone: 'Europe/Berlin',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }).format(new Date(booking.date))
+    : '';
+
+  const venue       = booking?.venue || offer?.location || '';
+  const program     = booking?.program || booking?.level || offer?.title || offer?.sub_type || offer?.type || 'Kurs';
+  const dayTimes    = booking?.dayTimes || booking?.weekday || '';
+  const timeDisplay = booking?.timeDisplay || booking?.time || booking?.uhrzeit || '';
+
+  const ctx = {
+    brand: { ...brand, logoUrl },
+    greetingName: booking.firstName || 'Sportler',
+    confirmationCode: booking.confirmationCode || '',
+    dateDE,
+    booking: { program, dayTimes, timeDisplay, venue },
+    signature: {
+      signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
+      name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
+    },
+  };
+
+  // Template: templates/emails/booking-cancelled-confirmed.mjml
+  const html = renderMjmlFile('templates/emails/booking-cancelled-confirmed.mjml', ctx);
+
+  const attachments = logoAttachment ? [logoAttachment] : [];
+  await sendMail({
+    to,
+    subject: `Absage des bestätigten Termins – ${program}${dateDE ? ` am ${dateDE}` : ''}`,
+    text: '',
+    html,
+    attachments,
+  });
+}
+
+
 /* ================= Exports ================= */
 module.exports = {
   // generisch
@@ -1110,6 +1159,8 @@ module.exports = {
   sendPasswordResetMail,
   // Legacy
   sendBookingConfirmationEmail,
+
+sendBookingCancelledConfirmedEmail,
 };
 
 
