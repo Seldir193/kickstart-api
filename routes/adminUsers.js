@@ -274,4 +274,53 @@ router.post('/reset', async (req, res, next) => {
 
 
 
+
+
+
+
+
+
+// Wer bin ich?  → /api/admin/auth/me
+router.get('/me', adminAuth, async (req, res) => {
+  try {
+    const u = req.user || {};
+    // Versuch: anhand id oder email den Datensatz laden (damit Name immer aktuell ist)
+    let doc = null;
+    if (u._id || u.id) {
+      const id = String(u._id || u.id);
+      doc = await AdminUser.findById(id).lean();
+    }
+    if (!doc && u.email) {
+      doc = await AdminUser.findOne({ email: String(u.email).toLowerCase() }).lean();
+    }
+
+    const fullName =
+      (doc && doc.fullName) ||
+      u.fullName ||
+      u.name ||
+      '';
+
+    const email = (doc && doc.email) || u.email || '';
+
+    return res.json({
+      ok: true,
+      user: {
+        id: String((doc && doc._id) || u._id || u.id || ''),
+        email,
+        fullName,
+        displayName: fullName || email || 'Admin',
+      },
+    });
+  } catch (e) {
+    console.error('[adminUsers/me] failed:', e);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
 module.exports = router;
