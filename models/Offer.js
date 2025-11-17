@@ -42,6 +42,10 @@ const OfferSchema = new Schema(
     category: { type: String, default: '' },    // e.g. 'ClubPrograms' | 'Individual' | 'Weekly' | 'Holiday'
     sub_type: { type: String, default: '' },    // e.g. 'Torwarttraining', 'Foerdertraining_Athletik'
     legacy_type: { type: String, default: '' }, // mirrors type for backward compatibility
+
+    // im Schema:
+//capacity: { type: Number, min: 0, default: 0 }, // 0 = unbegrenzt
+
   },
   { timestamps: true }
 );
