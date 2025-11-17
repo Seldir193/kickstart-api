@@ -132,6 +132,46 @@ function courseOnly(raw) {
 }
 
 
+
+
+
+
+
+
+
+// Spezialprogramme: Rent-a-Coach, Training Camps, Coach Education
+const NON_TRIAL_TYPES = new Set([
+  'RentACoach_Generic',
+  'RentACoach',
+  'ClubProgram_Generic',
+  'ClubProgram',
+  'CoachEducation',
+]);
+
+function buildProgramLabel(offer, booking) {
+  // 1) Bevorzugt echte Titel
+  if (offer?.title)        return courseOnly(offer.title);
+  if (booking?.offerTitle) return courseOnly(booking.offerTitle);
+  if (booking?.offerType)  return courseOnly(booking.offerType);
+
+  // 2) Typen/Subtypen nutzen
+  if (offer?.sub_type) return courseOnly(offer.sub_type);
+  if (offer?.type)     return courseOnly(offer.type);
+
+  // 3) Fallback → das, was du bisher hattest
+  if (booking?.program) return courseOnly(booking.program);
+  if (booking?.level)   return courseOnly(booking.level);
+
+  return 'Buchung';
+}
+
+
+
+
+
+
+
+
 function parseInquiryMessage(msg) {
   const t = String(msg || '');
   const pick = (label) => {
@@ -172,7 +212,7 @@ function parseInquiryMessage(msg) {
 
 /* ================= Buchungs-MJML (unverändert) ================= */
 
-async function sendBookingAckEmail({ to, offer, booking, pro }) {
+async function sendBookingAckEmail({ to, offer, booking, pro, isNonTrial = false  }) {
   if (!to) return;
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
 
@@ -204,17 +244,30 @@ const ctx = {
     // NUR Kursname – ohne Adresse/Ort
     offer: courseOnly(rawOffer),
     date: dateDE,
-    level: booking.level,
+    //level: booking.level,
     age: booking.age,
     // message NICHT mehr verwenden (wir zeigen unten die aufbereiteten Felder)
   },
   // neue, strukturierte Formular-Felder für das MJML
   form,
+  isNonTrial,
   signature: {
     signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
     name:    process.env.MAIL_SIGNER  || 'Selcuk Kocyigit',
   },
 };
+
+// ⬇️ NEU: Für RentACoach / ClubProgram / CoachEducation bestimmte Felder leeren
+if (isNonTrial) {
+  // nichts mit Level / Alter / Kind anzeigen
+  ctx.summary.level = '';
+  ctx.summary.age   = '';
+
+  // Formular-Felder, die in der Mail als "Kind / Geburtstag" etc. auftauchen
+  ctx.form.child     = '';
+  ctx.form.birthdate = '';
+}
+
 
 const html = renderMjmlFile('templates/emails/booking-ack.mjml', ctx);
 
@@ -225,16 +278,25 @@ const html = renderMjmlFile('templates/emails/booking-ack.mjml', ctx);
   await sendMail({ to, subject: 'Eingangsbestätigung – deine Buchungsanfrage', html, text: '', attachments });
 }
 
-async function sendBookingProcessingEmail({ to, booking }) {
+
+
+
+
+
+
+async function sendBookingProcessingEmail({ to, booking, offer, isNonTrial = false }) {
   if (!to) return;
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
+
+  // Jetzt IMMER echter Kursname
+  const programLabel = buildProgramLabel(offer, booking);
 
   const ctx = {
     brand: { ...brand, logoUrl },
     title: 'Deine Buchung ist in Bearbeitung',
     greetingName: booking.firstName || 'Sportler',
     booking: {
-      program: booking.program || booking.level || 'Buchung',
+      program: programLabel,
       date: booking.date || '',
       code: booking.confirmationCode || '',
     },
@@ -248,6 +310,9 @@ async function sendBookingProcessingEmail({ to, booking }) {
   const attachments = logoAttachment ? [logoAttachment] : [];
   await sendMail({ to, subject: 'Status-Update – in Bearbeitung', html, text: '', attachments });
 }
+
+
+
 
 async function sendBookingCancelledEmail({ to, booking }) {
   if (!to || !booking) return;
@@ -592,12 +657,8 @@ const addressLine  = [addressLine1, addressLine2].filter(Boolean).join(', ')
 
 
 
-
-
-
-
 // ---- Termin bestätigt – E-Mail mit optionalem PDF-Anhang ----
-async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
+async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer, isNonTrial = false }) {
   if (!to) return;
 
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
@@ -634,7 +695,6 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
       const norm = (v) => String(v || '').toLowerCase();
       const weekdayNorm = norm(weekdayName);
 
-      // passendes Objekt nach Wochentag, sonst erstes Element
       let cand = off.days.find(d =>
         norm(d?.day) === weekdayNorm ||
         norm(d?.weekday) === weekdayNorm ||
@@ -656,7 +716,6 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
       }
     }
 
-    // root-Felder
     const from = off.timeFrom ?? off.from ?? off.start;
     const to   = off.timeTo   ?? off.to   ?? off.end;
     if (from || to) return joinRange(from, to);
@@ -669,7 +728,7 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
   const childFull =
     booking.childName ||
     [booking.childFirstName, booking.childLastName].filter(Boolean).join(' ') ||
-    [booking.firstName, booking.lastName].filter(Boolean).join(' ') ||   // ← dein Booking hat diese Felder
+    [booking.firstName, booking.lastName].filter(Boolean).join(' ') ||
     booking.child ||
     '';
 
@@ -688,20 +747,29 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
     findTimeRangeFromOffer(offer, weekdayDE) ||
     '';
 
-  const subject = `Termin bestätigt – ${booking.level || 'Kurs'} am ${booking.date || ''}`;
+  // 👉 NEU: Programmnamen für Spezialprogramme überschreiben
+
+  const programLabel = buildProgramLabel(offer, booking);
+
+
+  const subject = `Termin bestätigt – ${programLabel} am ${booking.date || ''}`;
 
   const ctx = {
     brand: { ...brand, logoUrl },
     title: 'Terminbestätigung',
     greetingName: booking.firstName || 'Sportler',
     booking: {
-      program: booking.program || booking.level || 'Buchung',
-      date: dateDE,
-      code: booking.confirmationCode || '',
+      program:     programLabel,
+      date:        dateDE,
+      code:        booking.confirmationCode || '',
       childFull,
       dayTimes,
       timeDisplay,
     },
+    // Flag + Label für das MJML-Template
+    isNonTrial,
+    childLabel: isNonTrial ? 'Name' : 'Kind',
+
     message: 'Im Anhang findest du die Terminbestätigung als PDF.',
     signature: {
       signoff: process.env.MAIL_SIGNOFF || 'Mit sportlichen Grüßen',
@@ -717,6 +785,8 @@ async function sendBookingConfirmedEmail({ to, booking, offer, pdfBuffer }) {
 
   await sendMail({ to, subject, html, attachments, text: '' });
 }
+
+
 
 
 
@@ -1093,8 +1163,10 @@ const endDateDE  = endDateRaw ? new Intl.DateTimeFormat('de-DE').format(new Date
 
 
 
+
+
 // utils/mailer.js  — NEU
-async function sendBookingCancelledConfirmedEmail({ to, booking, offer }) {
+async function sendBookingCancelledConfirmedEmail({ to, booking, offer, isNonTrial = false }) {
   if (!to) return;
 
   const { brand, logoAttachment, logoUrl } = getBrandAndLogoCidAttachment();
@@ -1108,8 +1180,13 @@ async function sendBookingCancelledConfirmedEmail({ to, booking, offer }) {
       }).format(new Date(booking.date))
     : '';
 
-  const venue       = booking?.venue || offer?.location || '';
-  const program     = booking?.program || booking?.level || offer?.title || offer?.sub_type || offer?.type || 'Kurs';
+  const venue    = booking?.venue || offer?.location || '';
+
+  
+
+  const program = buildProgramLabel(offer, booking);
+
+
   const dayTimes    = booking?.dayTimes || booking?.weekday || '';
   const timeDisplay = booking?.timeDisplay || booking?.time || booking?.uhrzeit || '';
 
@@ -1137,6 +1214,7 @@ async function sendBookingCancelledConfirmedEmail({ to, booking, offer }) {
     attachments,
   });
 }
+
 
 
 /* ================= Exports ================= */
