@@ -1,4 +1,5 @@
 
+
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -50,7 +51,7 @@
         <mj-text font-size="16px" font-weight="700" padding="0 24px">Zusammenfassung</mj-text>
         <mj-spacer height="6px" />
         <mj-text padding="0 24px">
-          <b>Programm:</b> {{booking.program}}<br/>
+          <b>Programm:</b> {{booking.program}} <br/>
           {{#if booking.date}}<b>Datum:</b> {{booking.date}}<br/>{{/if}}
           {{#if booking.code}}<b>Referenz:</b> {{booking.code}}{{/if}}
         </mj-text>
@@ -115,3 +116,15 @@
     </mj-section>
   </mj-body>
 </mjml>
+
+
+
+
+
+
+
+
+
+
+
+
