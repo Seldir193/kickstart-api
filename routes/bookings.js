@@ -1,3 +1,4 @@
+
 // routes/bookings.js
 'use strict';
 
@@ -25,6 +26,20 @@ const ALLOWED_STATUS = ['pending','processing','confirmed','cancelled','deleted'
 
 function normalizeStatus(s) { return s === 'canceled' ? 'cancelled' : s; }
 function escapeRegex(s) { return String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+
+
+const NON_TRIAL_PROGRAMS = ['RentACoach', 'ClubProgram', 'CoachEducation'];
+
+function isNonTrialProgram(offer) {
+  if (!offer) return false;
+  const cat  = String(offer.category || '').trim();
+  const type = String(offer.type || '').trim();
+  const sub  = String(offer.sub_type || '').trim();
+  return NON_TRIAL_PROGRAMS.includes(cat)
+      || NON_TRIAL_PROGRAMS.includes(type)
+      || NON_TRIAL_PROGRAMS.includes(sub);
+}
 
 function resolveOwner(req) {
   const fromHeader = req.get('x-provider-id');
@@ -175,6 +190,8 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Offer does not belong to this provider' });
     }
 
+    const isNonTrial = isNonTrialProgram(offer);
+
     const first = String(req.body.firstName || '').trim();
     const last  = String(req.body.lastName  || '').trim();
     if (first && last) {
@@ -232,7 +249,7 @@ router.post('/', async (req, res) => {
     }
 
     try {
-      await sendBookingAckEmail({ to: created.email, offer, booking: created, pro });
+      await sendBookingAckEmail({ to: created.email, offer, booking: created, pro, isNonTrial, });
     } catch (mailErr) {
       console.warn('[bookings] ack email failed:', mailErr?.message || mailErr);
     }
@@ -313,15 +330,39 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
     );
     if (!updated) return res.status(404).json({ ok: false, code: 'NOT_FOUND' });
 
+  
+
+
+
+
+
+
     let mailSentProcessing = false;
     let mailSentCancelled  = false;
 
     if (status === 'processing' && (prev.status !== 'processing' || forceMail)) {
       try {
-        await sendBookingProcessingEmail({ to: updated.email, booking: updated });
+        // Offer laden, um Programmnamen zu kennen
+        const offer = updated.offerId
+          ? await Offer.findOne({ _id: updated.offerId, owner: ownerId }).lean()
+          : null;
+
+        const isNonTrial = isNonTrialProgram(offer);
+
+        await sendBookingProcessingEmail({
+          to: updated.email,
+          booking: updated,
+          offer,
+          isNonTrial,
+        });
+
         mailSentProcessing = true;
-      } catch (e) { console.error('[BOOKINGS] processing-mail FAILED:', e?.message || e); }
+      } catch (e) {
+        console.error('[BOOKINGS] processing-mail FAILED:', e?.message || e);
+      }
     }
+
+
 
     if (status === 'cancelled' && (prev.status !== 'cancelled' || forceMail)) {
       try {
@@ -394,8 +435,10 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
       ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
       : null;
 
+
+ const isNonTrial = isNonTrialProgram(offer);
     try {
-      await sendBookingConfirmedEmail({ to: booking.email, booking, offer });
+      await sendBookingConfirmedEmail({ to: booking.email, booking, offer,isNonTrial });
       return res.json({ ok: true, booking, mailSent: true });
     } catch (mailErr) {
       console.error('[bookings:confirm] mail/pdf failed:', mailErr?.message || mailErr);
@@ -455,8 +498,9 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
       ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
       : null;
 
+      const isNonTrial = isNonTrialProgram(offer);
     try {
-      await sendBookingCancelledConfirmedEmail({ to: booking.email, booking, offer });
+      await sendBookingCancelledConfirmedEmail({ to: booking.email, booking, offer,isNonTrial });
       return res.json({ ok:true, booking, mailSent:true });
     } catch (e) {
       console.error('[bookings:cancel-confirmed] mail failed:', e?.message || e);
@@ -472,6 +516,16 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
 
 
 module.exports = router;
+
+
+
+
+
+
+
+
+
+
 
 
 
