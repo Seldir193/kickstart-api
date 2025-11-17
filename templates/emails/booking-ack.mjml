@@ -51,20 +51,29 @@
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">Details</mj-text>
         <mj-spacer height="6px" />
-        <mj-text padding="0 24px">
-          <b>Programm:</b> {{courseOnly summary.offer}}<br/>
-          {{#if summary.date}}<b>Wunschtermin:</b> {{summary.date}}<br/>{{/if}}
-          {{#if summary.level}}<b>Gruppe/Level:</b> {{summary.level}}<br/>{{/if}}
-          
-          {{#if form.child}}<b>Kind:</b> {{form.child}}<br/>{{/if}}
-      {{#if form.birthdate}}<b>Geburtstag:</b> {{form.birthdate}}<br/>{{/if}}
-      {{#if form.contact}}<b>Kontakt:</b> {{form.contact}}<br/>{{/if}}
-      {{#if form.address}}<b>Adresse:</b> {{form.address}}<br/>{{/if}}
-      {{#if form.phone}}<b>Telefon:</b> {{form.phone}}<br/>{{/if}}
-      {{#if form.voucher}}<b>Gutschein:</b> {{form.voucher}}<br/>{{/if}}
-      {{#if form.source}}<b>Quelle:</b> {{form.source}}{{/if}}
-          
-        </mj-text>
+     
+
+
+<mj-text padding="0 24px">
+  <b>Programm:</b> {{courseOnly summary.offer}}<br/>
+
+  {{!-- Nur bei NICHT-Spezialprogrammen anzeigen --}}
+  {{#unless isNonTrial}}
+    {{#if summary.date}}<b>Wunschtermin:</b> {{summary.date}}<br/>{{/if}}
+    {{#if summary.level}}<b>Gruppe/Level:</b> {{summary.level}}<br/>{{/if}}
+    {{#if form.birthdate}}<b>Geburtstag:</b> {{form.birthdate}}<br/>{{/if}}
+  {{/unless}}
+
+  {{#if form.child}}<b>Kind:</b> {{form.child}}<br/>{{/if}}
+  {{#if form.contact}}<b>Kontakt:</b> {{form.contact}}<br/>{{/if}}
+  {{#if form.address}}<b>Adresse:</b> {{form.address}}<br/>{{/if}}
+  {{#if form.phone}}<b>Telefon:</b> {{form.phone}}<br/>{{/if}}
+  {{#if form.voucher}}<b>Gutschein:</b> {{form.voucher}}<br/>{{/if}}
+  {{#if form.source}}<b>Quelle:</b> {{form.source}}{{/if}}
+</mj-text>
+
+
+
       </mj-column>
     </mj-section>
 
