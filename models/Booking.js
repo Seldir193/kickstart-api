@@ -49,6 +49,13 @@ const BookingSchema = new Schema({
     default: 'pending',
     index: true,
   },
+
+   previousStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'confirmed', 'cancelled', 'deleted'],
+    default: null,
+  },
+
   confirmationCode: { type: String, unique: true, sparse: true },
   confirmedAt: { type: Date },
   adminNote:   { type: String, default: '' },
