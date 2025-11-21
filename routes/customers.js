@@ -393,11 +393,13 @@ function requireId(req, res) {
 }
 
 
+
+
 /** Admin: interne Buchung hinzufügen */
 router.post('/:id/bookings', async (req, res) => {
   try {
     const owner = requireOwner(req, res); if (!owner) return;
-    const id = requireId(req, res); if (!id) return;
+    const id    = requireId(req, res);    if (!id)    return;
 
     const { offerId, date } = req.body || {};
     if (!offerId || !mongoose.isValidObjectId(offerId)) {
@@ -410,25 +412,45 @@ router.post('/:id/bookings', async (req, res) => {
     const customer = await Customer.findOne({ _id: id, owner });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
+    // ---------- Holiday erkennen (Camp + Powertraining) ----------
+    const cat  = String(offer.category || '').toLowerCase().replace(/\s+/g, '');
+    const type = String(offer.type || '').toLowerCase();
+    const sub  = String(offer.sub_type || '').toLowerCase();
+
+    const isHoliday =
+      cat === 'holiday' ||
+      cat === 'holidayprograms' ||
+      /camp|feriencamp|holiday|powertraining|power training/i.test(`${type} ${sub}`);
+
     // 1) Subdoc im Customer speichern (mit Link auf zentrale Buchung)
     const bookingId = new Types.ObjectId();
-    const when = date ? new Date(date) : new Date();
+    const when      = date ? new Date(date) : new Date();
 
     customer.bookings.push({
       _id: bookingId,
       bookingId, // <--- wichtig
       offerId: offer._id,
       offerTitle: offer.title,
-      offerType: offer.sub_type || offer.type || '',
-      venue: offer.location || '',
-      date: when,
-      status: 'active',
-      createdAt: new Date(),
-      priceAtBooking: (typeof offer.price === 'number') ? offer.price : undefined,
+      offerType:  offer.sub_type || offer.type || '',
+      venue:      offer.location || '',
+      date:       when,
+      status:     'active',
+      createdAt:  new Date(),
+      priceAtBooking:
+        typeof offer.price === 'number' ? offer.price : undefined,
     });
 
     const bookingSubdoc = customer.bookings.id(bookingId);
-    await assignInvoiceData({ booking: bookingSubdoc, offer, providerId: String(owner) });
+
+    // 🔹 Nur NICHT-HOLIDAY bekommt hier sofort eine Rechnungsnummer
+    if (!isHoliday) {
+      await assignInvoiceData({
+        booking: bookingSubdoc,
+        offer,
+        providerId: String(owner),
+      });
+    }
+
     await customer.save();
 
     // 2) Zentrale Buchung in Booking-Collection anlegen
@@ -439,29 +461,56 @@ router.post('/:id/bookings', async (req, res) => {
       offerId: offer._id,
       firstName: customer.child?.firstName || 'Vorname',
       lastName:  customer.child?.lastName  || 'Nachname',
-      email:     customer.parent?.email     || `noemail+${bookingId}@example.com`,
-      age:       customer.child?.birthDate
-                   ? Math.max(5, Math.min(19,
-                       Math.floor((Date.now() - new Date(customer.child.birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-                     ))
-                   : 10,
-      date:      when.toISOString().slice(0,10), // 'yyyy-mm-dd'
-      level:     'U12',
-      message:   customer.notes || '',
-      status:    'pending',
-      priceAtBooking: (typeof offer.price === 'number') ? offer.price : undefined,
-      // optional: Rechnungs-Snapshot aus Subdoc übernehmen, falls assignInvoiceData etwas gesetzt hat
-      invoiceNumber: bookingSubdoc?.invoiceNumber || undefined,
-      invoiceNo:     bookingSubdoc?.invoiceNo     || undefined,
-      invoiceDate:   bookingSubdoc?.invoiceDate   || undefined,
+      email:
+        customer.parent?.email ||
+        `noemail+${bookingId}@example.com`,
+      age: customer.child?.birthDate
+        ? Math.max(
+            5,
+            Math.min(
+              19,
+              Math.floor(
+                (Date.now() -
+                  new Date(customer.child.birthDate).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000)
+              )
+            )
+          )
+        : 10,
+      date:    when.toISOString().slice(0, 10), // 'yyyy-mm-dd'
+      level:   'U12',
+      message: customer.notes || '',
+      status:  'pending',
+      priceAtBooking:
+        typeof offer.price === 'number' ? offer.price : undefined,
+
+      // Nur für Nicht-Holidays übernehmen wir Rechnungsdaten aus dem Subdoc
+      invoiceNumber: !isHoliday ? bookingSubdoc?.invoiceNumber : undefined,
+      invoiceNo:     !isHoliday ? bookingSubdoc?.invoiceNo     : undefined,
+      invoiceDate:   !isHoliday ? bookingSubdoc?.invoiceDate   : undefined,
     });
 
-    return res.status(201).json({ ok: true, booking: bookingSubdoc.toObject() });
+    return res
+      .status(201)
+      .json({ ok: true, booking: bookingSubdoc.toObject(), isHoliday });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Server error', detail: String(err?.message || err) });
+    console.error('[customers/:id/bookings]', err);
+    return res.status(500).json({
+      error: 'Server error',
+      detail: String(err?.message || err),
+    });
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 
 
