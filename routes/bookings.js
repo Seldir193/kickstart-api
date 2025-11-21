@@ -1,5 +1,4 @@
 
-
 // routes/bookings.js
 'use strict';
 
@@ -162,6 +161,70 @@ function isHolidayProgram(offer) {
 
 
 
+// --- Spezifische Holiday-Typen erkennen --- //
+function isCampOffer(offer) {
+  if (!offer) return false;
+  return String(offer.category || '') === 'Holiday' &&
+         String(offer.type || '') === 'Camp';
+}
+
+function isPowertrainingOffer(offer) {
+  if (!offer) return false;
+  return String(offer.category || '') === 'Holiday' &&
+         String(offer.sub_type || '') === 'Powertraining';
+}
+
+// Weekly-Angebote (laufende Kurse) erkennen
+function isWeeklyOffer(offer) {
+  if (!offer) return false;
+  const cat  = String(offer.category || '');
+  const type = String(offer.type || '');
+  return (
+    cat === 'Weekly' ||
+    type === 'Foerdertraining' ||
+    type === 'Kindergarten'
+  );
+}
+
+// Prüft, ob dieses Kind einen laufenden Weekly-Kurs (status=confirmed) hat
+async function childHasActiveWeeklyBooking({ ownerId, firstName, lastName }) {
+  const first = String(firstName || '').trim();
+  const last  = String(lastName  || '').trim();
+  if (!first || !last) return false;
+
+  // 1) relevante Weekly-Offers holen
+  const weeklyOfferIds = await Offer.find({
+    owner: ownerId,
+    $or: [
+      { category: 'Weekly' },
+      { type: 'Foerdertraining' },
+      { type: 'Kindergarten' },
+    ],
+  }).distinct('_id').exec();
+
+  if (!weeklyOfferIds.length) return false;
+
+  // 2) Booking mit gleichem Kind + confirmed-Status suchen
+  const firstRegex = new RegExp(`^${escapeRegex(first)}$`, 'i');
+  const lastRegex  = new RegExp(`^${escapeRegex(last)}$`, 'i');
+
+  const existing = await Booking.findOne({
+    owner: ownerId,
+    offerId: { $in: weeklyOfferIds },
+    firstName: firstRegex,
+    lastName:  lastRegex,
+    status: 'confirmed', // nur wirklich laufende Kurse
+  }).lean();
+
+  return !!existing;
+}
+
+
+
+
+
+
+
 
 
 
@@ -186,8 +249,31 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
     }
 
     const forceResend      = String(req.query.resend || '') === '1';
-    const withInvoice      = String(req.query.withInvoice || '') === '1'; // 🔹 NEU
+    const withInvoiceParam = String(req.query.withInvoice || '') === '1';
     const alreadyConfirmed = booking.status === 'confirmed';
+
+    // Offer holen
+    const offer = booking.offerId
+      ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
+      : null;
+
+    const isNonTrial = isNonTrialProgram(offer);
+    const isHoliday  = isHolidayProgram(offer);
+
+    // Quelle der Buchung (online UI vs. intern)
+    const isOnline = booking.source === 'online_request';
+
+    /**
+     * Wann soll eine Teilnahme/Rechnung verschickt werden?
+     *
+     * - Holiday (Camp/Powertraining): immer
+     * - interne Buchungen (nicht online_request): immer
+     * - Online-Anfragen: nur wenn ?withInvoice=1
+     */
+    const wantInvoice =
+      isHoliday ||
+      !isOnline ||
+      withInvoiceParam;
 
     // Bestätigungscode + Status setzen
     if (!booking.confirmationCode) {
@@ -206,28 +292,23 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
         ok: true,
         booking,
         info: 'already confirmed (no email sent)',
+        wantInvoice,
       });
     }
 
-    // Offer holen
-    const offer = booking.offerId
-      ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
-      : null;
-
-    const isNonTrial = isNonTrialProgram(offer);
-    const isHoliday  = isHolidayProgram(offer);
-
     try {
-      // 1) Normale Terminbestätigung → IMMER
-      await sendBookingConfirmedEmail({
-        to: booking.email,
-        booking,
-        offer,
-        isNonTrial,
-      });
+      // 1) Terminbestätigung NUR für Online-Anfragen
+      if (isOnline) {
+        await sendBookingConfirmedEmail({
+          to: booking.email,
+          booking,
+          offer,
+          isNonTrial,
+        });
+      }
 
-      // 2) Teilnahme/Rechnung NUR, wenn explizit angefordert (withInvoice=1)
-      if (withInvoice) {
+      // 2) Teilnahme/Rechnung, wenn gewünscht
+      if (wantInvoice) {
         if (isHoliday) {
           // Holiday: spezielle Holiday-Rechnung + Teilnahme-Mail (mit PDF)
           await createHolidayInvoiceForBooking({
@@ -259,7 +340,13 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
         }
       }
 
-      return res.json({ ok: true, booking, mailSent: true, withInvoice });
+      return res.json({
+        ok: true,
+        booking,
+        mailSent: true,
+        wantInvoice,
+      });
+
     } catch (mailErr) {
       console.error(
         '[bookings:confirm] mail/pdf failed:',
@@ -269,20 +356,16 @@ router.post('/:id/confirm', adminAuth, async (req, res) => {
         ok: true,
         booking,
         mailSent: false,
-        withInvoice,
+        wantInvoice,
         error: 'mail_failed',
       });
     }
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
-
-
-
-
-
 
 
 
@@ -323,10 +406,17 @@ function validate(payload) {
   return errors;
 }
 
+
+
+
 function buildFilter(query, ownerId) {
   const { q, status, date, includeHoliday } = query || {};
 
-  const filter = { owner: ownerId };
+  // 👇 Basis: Owner + KEINE internen Admin-Buchungen
+  const filter = {
+    owner: ownerId,
+    source: { $ne: 'admin_booking' },   // <-- interne Buchungen ausblenden
+  };
 
   // Wenn includeHoliday NICHT gesetzt ist:
   // → Camp/Powertraining aus Online-Formular in "Bookings" ausblenden
@@ -371,9 +461,61 @@ function buildFilter(query, ownerId) {
 
 
 /* ---------- Customer-Helper ---------- */
+
+// Hilfsfunktion: Child-Daten aus Payload lesen
+function extractChildFromPayload(payload) {
+  const firstName = String(payload.firstName || '').trim();
+  const lastName  = String(payload.lastName  || '').trim();
+
+  // wir akzeptieren mehrere mögliche Keys fürs Geburtsdatum
+  const birthRaw =
+    payload.birthDate ||
+    payload.birthdate ||
+    payload.childBirthDate ||
+    payload.childBirthdate ||
+    null;
+
+  const birthDate = birthRaw ? new Date(birthRaw) : null;
+
+  return {
+    firstName,
+    lastName,
+    birthDate: isNaN(birthDate?.getTime?.()) ? null : birthDate,
+    club: String(payload.club || ''),
+  };
+}
+
+// prüft, ob ein Child (Name + optional GebDatum) schon im Customer existiert
+function hasSameChild(child, target) {
+  if (!child || !target) return false;
+
+  const sameName =
+    String(child.firstName || '').trim().toLowerCase() ===
+      String(target.firstName || '').trim().toLowerCase() &&
+    String(child.lastName || '').trim().toLowerCase() ===
+      String(target.lastName || '').trim().toLowerCase();
+
+  if (!sameName) return false;
+
+  if (!child.birthDate || !target.birthDate) {
+    // kein Geburtsdatum → wir matchen nur auf Namen
+    return sameName;
+  }
+
+  const a = new Date(child.birthDate);
+  const b = new Date(target.birthDate);
+  return (
+    !isNaN(a.getTime()) &&
+    !isNaN(b.getTime()) &&
+    a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)
+  );
+}
+
 async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload }) {
   const emailLower = String(payload.email || '').trim().toLowerCase();
+  const childFromForm = extractChildFromPayload(payload);
 
+  // 1) Parent per E-Mail suchen
   let customer = await Customer.findOne({
     owner: ownerId,
     $or: [
@@ -383,10 +525,12 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     ],
   });
 
+  // Basis-Infos für Booking-Referenz
   const bookingDate = new Date(String(payload.date) + 'T00:00:00');
-  const venue = typeof offer?.location === 'string'
-    ? offer.location
-    : (offer?.location?.name || offer?.location?.title || '');
+  const venue =
+    typeof offer?.location === 'string'
+      ? offer.location
+      : offer?.location?.name || offer?.location?.title || '';
 
   const bookingRef = {
     bookingId:   bookingDoc._id,
@@ -395,42 +539,105 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     offerType:   String(offer.type || ''),
     venue,
     date:        isNaN(bookingDate.getTime()) ? null : bookingDate,
-    status:      'active',
+    status:      'active', // laufende Teilnahme
     priceAtBooking: typeof offer.price === 'number' ? offer.price : null,
   };
 
+  // 2) Wenn kein Customer → neu anlegen
   if (!customer) {
     await Customer.syncCounterWithExisting(ownerId);
     const nextUserId = await Customer.nextUserIdForOwner(ownerId);
 
+    const child = {
+      firstName: childFromForm.firstName,
+      lastName:  childFromForm.lastName,
+      birthDate: childFromForm.birthDate,
+      club:      childFromForm.club,
+    };
+
     customer = await Customer.create({
       owner: ownerId,
       userId: nextUserId,
+
       email: emailLower,
       emailLower,
       newsletter: false,
-      parent: { email: emailLower },
-      child:  { firstName: String(payload.firstName||''), lastName: String(payload.lastName||'') },
-      notes:  (payload.message || '').toString(),
+
+      parent: {
+        email: emailLower,
+        // Falls du später Elternnamen im Formular hast, können wir die hier ergänzen
+      },
+
+      // erstes Kind in "child" UND in "children[0]"
+      child,
+      children: child.firstName || child.lastName ? [child] : [],
+
+      notes: (payload.message || '').toString(),
       bookings: [bookingRef],
       marketingStatus: null,
     });
+
     return customer;
   }
 
+  // 3) Customer existiert → ggf. fehlende userId vergeben
   if (customer.userId == null) {
     await Customer.assignUserIdIfMissing(customer);
   }
 
-  const already = customer.bookings?.some(b =>
-    String(b.offerId) === String(offer._id) &&
-    String(b.bookingId) === String(bookingDoc._id)
-  );
-  if (!already) customer.bookings.push(bookingRef);
+  // 4) Child-Liste vorbereiten
+  if (!Array.isArray(customer.children)) {
+    customer.children = [];
+  }
 
+  // falls das alte Feld "child" gefüllt ist, aber children leer → einmalig übernehmen
+  if (
+    customer.child &&
+    (customer.child.firstName || customer.child.lastName) &&
+    customer.children.length === 0
+  ) {
+    customer.children.push({
+      firstName: customer.child.firstName,
+      lastName:  customer.child.lastName,
+      birthDate: customer.child.birthDate,
+      club:      customer.child.club,
+    });
+  }
+
+  // 5) Prüfen, ob dieses Kind schon existiert
+  const hasChild =
+    hasSameChild(customer.child, childFromForm) ||
+    customer.children.some((c) => hasSameChild(c, childFromForm));
+
+  if (!hasChild && (childFromForm.firstName || childFromForm.lastName)) {
+    // neues Kind anhängen
+    customer.children.push({
+      firstName: childFromForm.firstName,
+      lastName:  childFromForm.lastName,
+      birthDate: childFromForm.birthDate,
+      club:      childFromForm.club,
+    });
+
+    // falls noch kein "Haupt-Kind" gesetzt ist → dieses Kind als Haupt-Kind übernehmen
+    if (!customer.child || (!customer.child.firstName && !customer.child.lastName)) {
+      customer.child = customer.children[0];
+    }
+  }
+
+  // 6) BookingRef nur hinzufügen, wenn er noch nicht existiert
+  const already = customer.bookings?.some(
+    (b) =>
+      String(b.offerId) === String(offer._id) &&
+      String(b.bookingId) === String(bookingDoc._id)
+  );
+  if (!already) {
+    customer.bookings.push(bookingRef);
+  }
+
+  // Basis-Felder sauber halten
   if (!customer.emailLower) customer.emailLower = emailLower;
-  if (!customer.email)      customer.email = emailLower;
-  if (!customer.parent)     customer.parent = {};
+  if (!customer.email) customer.email = emailLower;
+  if (!customer.parent) customer.parent = {};
   if (!customer.parent.email) customer.parent.email = emailLower;
 
   await customer.save();
@@ -440,11 +647,18 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
 
 
 
+
+
+
+
+
+
+
+
+
+
 // z.B. in routes/bookings.js oder in einer helper-Datei
 
-
-
-/* ------------------------------ Routes ------------------------------ */
 
 // Create booking
 router.post('/', async (req, res) => {
@@ -454,27 +668,40 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ ok: false, code: 'VALIDATION', errors });
     }
     if (!req.body.offerId) {
-      return res.status(400).json({ ok: false, code: 'VALIDATION', error: 'offerId is required' });
+      return res.status(400).json({
+        ok: false,
+        code: 'VALIDATION',
+        error: 'offerId is required',
+      });
     }
 
     const offer = await Offer.findById(String(req.body.offerId))
       .select('_id owner title type category sub_type location onlineActive price')
       .lean();
-    if (!offer) return res.status(400).json({ ok: false, error: 'Offer not found' });
+    if (!offer) {
+      return res.status(400).json({ ok: false, error: 'Offer not found' });
+    }
     if (offer.onlineActive === false) {
       return res.status(400).json({ ok: false, error: 'Offer not bookable' });
     }
 
     const pidHeader = (req.get('x-provider-id') || '').trim();
     if (pidHeader && String(offer.owner) !== pidHeader) {
-      return res.status(403).json({ ok: false, error: 'Offer does not belong to this provider' });
+      return res.status(403).json({
+        ok: false,
+        error: 'Offer does not belong to this provider',
+      });
     }
 
     const isNonTrial = isNonTrialProgram(offer);
-    const isHoliday  = isHolidayProgram(offer);   // ✅ NEU
+    const isHoliday  = isHolidayProgram(offer);
+    const isCamp     = isCampOffer(offer);
+    const isPower    = isPowertrainingOffer(offer);
 
     const first = String(req.body.firstName || '').trim();
     const last  = String(req.body.lastName  || '').trim();
+
+    // --- DUPLICATE-Prüfung wie bisher (pro Offer + Name) --- //
     if (first && last) {
       const exists = await Booking.findOne({
         offerId:  offer._id,
@@ -487,28 +714,55 @@ router.post('/', async (req, res) => {
           ok: false,
           code: 'DUPLICATE',
           errors: {
-            firstName: 'A booking with this first/last name already exists for this offer.',
-            lastName:  'Please use different names or contact us.',
+            firstName:
+              'A booking with this first/last name already exists for this offer.',
+            lastName: 'Please use different names or contact us.',
           },
         });
       }
     }
 
+    // --- SPEZIAL: POWERTRAINING nur für Kinder mit laufendem Weekly-Kurs --- //
+    if (isPower) {
+      const allowed = await childHasActiveWeeklyBooking({
+        ownerId: offer.owner,
+        firstName: first,
+        lastName:  last,
+      });
+
+      if (!allowed) {
+        // Keine Buchung anlegen – sofort Absage zurückgeben
+        return res.status(403).json({
+          ok: false,
+          code: 'POWERTRAINING_NOT_ALLOWED',
+          error: 'POWERTRAINING_NOT_ALLOWED',
+          message:
+            'Sie können kein Powertraining buchen. Bitte melden Sie sich unter fussballschule@selcuk-kocyigit.de.',
+        });
+      }
+    }
+
+    // Bisherige Pro-Rata-Logik unverändert
     const isWeekly =
       offer?.category === 'Weekly' ||
       offer?.type === 'Foerdertraining' ||
       offer?.type === 'Kindergarten';
-    const monthlyPrice = (isWeekly && typeof offer.price === 'number') ? offer.price : null;
-    const pro = (isWeekly && monthlyPrice != null)
-      ? prorateForStart(req.body.date, monthlyPrice)
-      : {
-          daysInMonth: null,
-          daysRemaining: null,
-          factor: null,
-          firstMonthPrice: null,
-          monthlyPrice: null,
-        };
 
+    const monthlyPrice =
+      isWeekly && typeof offer.price === 'number' ? offer.price : null;
+
+    const pro =
+      isWeekly && monthlyPrice != null
+        ? prorateForStart(req.body.date, monthlyPrice)
+        : {
+            daysInMonth: null,
+            daysRemaining: null,
+            factor: null,
+            firstMonthPrice: null,
+            monthlyPrice: null,
+          };
+
+    // --- Booking anlegen (egal ob Weekly / Camp / Powertraining) --- //
     const created = await Booking.create({
       owner:   offer.owner,
       offerId: offer._id,
@@ -524,6 +778,7 @@ router.post('/', async (req, res) => {
     });
 
     // Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
+    //  – gilt für alle Programme inkl. Camp & Powertraining
     try {
       await upsertCustomerForBooking({
         ownerId: offer.owner,
@@ -532,7 +787,10 @@ router.post('/', async (req, res) => {
         payload: req.body,
       });
     } catch (custErr) {
-      console.error('[bookings] customer upsert failed:', custErr?.message || custErr);
+      console.error(
+        '[bookings] customer upsert failed:',
+        custErr?.message || custErr
+      );
     }
 
     // 1) Eingangsbestätigung (nur wenn NICHT Holiday)
@@ -546,14 +804,16 @@ router.post('/', async (req, res) => {
           isNonTrial,
         });
       } catch (mailErr) {
-        console.warn('[bookings] ack email failed:', mailErr?.message || mailErr);
+        console.warn(
+          '[bookings] ack email failed:',
+          mailErr?.message || mailErr
+        );
       }
     }
 
-    // 2) Holiday-Programme → direkt bestätigen + Rechnung
+    // 2) Holiday-Programme (Camp + Powertraining) -> automatisch bestätigen + Rechnung
     if (isHoliday) {
       try {
-        // wie in /:id/confirm
         if (!created.confirmationCode) {
           created.confirmationCode =
             'KS-' + crypto.randomBytes(3).toString('hex').toUpperCase();
@@ -586,12 +846,17 @@ router.post('/', async (req, res) => {
       }
     }
 
-    return res.status(201).json({ ok: true, booking: created, prorate: pro });
+    return res
+      .status(201)
+      .json({ ok: true, booking: created, prorate: pro });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ ok: false, code: 'SERVER', error: 'Server error' });
+    return res
+      .status(500)
+      .json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
 
 
 // List
@@ -653,7 +918,8 @@ router.get('/', adminAuth, async (req, res) => {
 
     // gleiche Filter-Teile auch für die Aggregation verwenden,
     // damit Counts und Liste übereinstimmen
-    const matchForCounts = { owner: ownerId };
+   // const matchForCounts = { owner: ownerId };
+    const matchForCounts = { ...filter };
 
     if (filter.status) matchForCounts.status = filter.status;
     if (filter.date)   matchForCounts.date   = filter.date;
@@ -1023,6 +1289,11 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
 
 
 module.exports = router;
+
+
+
+
+
 
 
 
