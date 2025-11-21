@@ -87,6 +87,7 @@ const CustomerSchema = new Schema({
 
   address:  { type: AddressSchema, default: () => ({}) },
   child:    { type: ChildSchema,   default: () => ({}) },
+   children: { type: [ChildSchema], default: () => [] },
   parent:   { type: ParentSchema,  default: () => ({}) },
 
   notes:    { type: String, default: '' },
