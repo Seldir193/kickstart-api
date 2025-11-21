@@ -1,46 +1,48 @@
-
-
-
-
-
-
-
-
-
-
 // utils/sequences.js
 const Counter = require('../models/Counter');
 
 async function nextSequence(key) {
   const doc = await Counter.findOneAndUpdate(
-    { _id: String(key) },                    // ✅ _id statt key
+    { _id: String(key) },
     { $inc: { seq: 1 } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();                                  // optional: plain object
-  return doc.seq; // 1, 2, 3, ...
+  ).lean();
+  return doc.seq;
 }
 
 function yearFrom(date = new Date()) {
   return new Date(date).getFullYear();
 }
 
+/** Typ → 2–3-Buchstaben-Code */
 function typeCodeFromOfferType(offerType = '') {
   const map = {
-    'Foerdertraining': 'FO',
-    'Kindergarten': 'KIGA',
-    'Athletiktraining': 'AT',
-    'AthleticTraining': 'AT',
+    Foerdertraining: 'FO',
+    Kindergarten: 'KDN',
+    PersonalTraining: 'PER',
+    Camp: 'CA',
+    Athletiktraining: 'ATH',
+    AthleticTraining: 'ATH',
+    RentACoach: 'RAC',
+    ClubProgram: 'CLB',
+    ClubPrograms: 'CLB',
+    CoachEducation: 'CED',
   };
-  return map[offerType] || (offerType.slice(0,2).toUpperCase() || 'XX');
+
+  const code = map[offerType];
+  if (code) return code;
+
+  // Fallback: erste 3 Buchstaben, max. 3
+  const trimmed = String(offerType || '').trim();
+  return trimmed ? trimmed.slice(0, 3).toUpperCase() : 'XXX';
 }
 
-/** ——— Bestehendes Langformat bleibt für Abwärtskompatibilität erhalten ——— */
+/** Haupt-Rechnungsnummer lang (dein bestehendes Format) */
 function formatNumber(providerId, code, year, seq) {
-  // z.B. "1/FO/2025/28"
   return `${providerId}/${code}/${year}/${seq}`;
 }
 
-/** ——— Neu: Kurzformate ——— */
+/* ---- Kurzform-Helfer bleiben wie gehabt ---- */
 function twoDigitYear(date = new Date()) {
   return String(yearFrom(date)).slice(-2);
 }
@@ -54,27 +56,38 @@ function randHex(len = 6) {
   return s;
 }
 
-/** Haupt-Rechnungsnummer kurz, z.B. "AT-25-0013" */
 function formatInvoiceShort(typeCode, seq, date = new Date()) {
   const yy = twoDigitYear(date);
   const code = (typeCode || 'INV').toUpperCase();
   return `${code}-${yy}-${pad4(seq)}`;
 }
 
-/** Kündigungsnummer, z.B. "KND-925B67" */
+/** Sub-Typen (sub_type) → Code */
+function typeCodeFromOffer(offer = {}) {
+  const st = String(offer?.sub_type || '');
+  const subMap = {
+    Powertraining: 'PW',
+    Foerdertraining_Athletik: 'ATH',
+    Torwarttraining: 'TWT',
+    Einzeltraining_Athletik: 'ETA',
+    Einzeltraining_Torwart: 'ETT',
+    RentACoach_Generic: 'RAC',
+    ClubProgram_Generic: 'CLB',
+    CoachEducation: 'CED',
+  };
+
+  if (subMap[st]) return subMap[st];
+
+  // sonst nach type mappen
+  return typeCodeFromOfferType(offer?.type || '');
+}
+
 function formatCancellationNo() {
   return `KND-${randHex(6)}`;
 }
 
-/** Stornonummer, z.B. "STORNO-925CF4" */
 function formatStornoNo() {
   return `STORNO-${randHex(6)}`;
-}
-
-function typeCodeFromOffer(offer = {}) {
-  const st = String(offer?.sub_type || '').toLowerCase();
-  if (st === 'powertraining') return 'PW';
-  return typeCodeFromOfferType(offer?.type || '');
 }
 
 module.exports = {
@@ -87,3 +100,14 @@ module.exports = {
   formatCancellationNo,
   formatStornoNo,
 };
+
+
+
+
+
+
+
+
+
+
+
