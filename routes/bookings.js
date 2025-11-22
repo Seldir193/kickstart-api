@@ -6,6 +6,9 @@ const express  = require('express');
 const crypto   = require('crypto');
 const mongoose = require('mongoose');
 
+
+
+
 const Booking   = require('../models/Booking');
 const Offer     = require('../models/Offer');
 const Customer  = require('../models/Customer');
@@ -14,6 +17,7 @@ const adminAuth = require('../middleware/adminAuth');
 const { createHolidayInvoiceForBooking } = require('../utils/holidayInvoices');
 
 
+const { formatStornoNo } = require('../utils/sequences');
 
 
 
@@ -460,14 +464,29 @@ function buildFilter(query, ownerId) {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ---------- Customer-Helper ---------- */
 
-// Hilfsfunktion: Child-Daten aus Payload lesen
+// Kind aus Payload extrahieren
 function extractChildFromPayload(payload) {
   const firstName = String(payload.firstName || '').trim();
   const lastName  = String(payload.lastName  || '').trim();
 
-  // wir akzeptieren mehrere mögliche Keys fürs Geburtsdatum
   const birthRaw =
     payload.birthDate ||
     payload.birthdate ||
@@ -511,19 +530,16 @@ function hasSameChild(child, target) {
   );
 }
 
+/**
+ * Sucht/legt Customer für eine Online-Buchung an.
+ * Regeln:
+ * 1) Wenn Eltern-E-Mail existiert → diesen Customer verwenden.
+ * 2) Sonst: nach Kind (Name + Geburtsdatum) suchen.
+ * 3) Nur wenn nichts gefunden → neuen Customer anlegen.
+ */
 async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload }) {
   const emailLower = String(payload.email || '').trim().toLowerCase();
   const childFromForm = extractChildFromPayload(payload);
-
-  // 1) Parent per E-Mail suchen
-  let customer = await Customer.findOne({
-    owner: ownerId,
-    $or: [
-      { emailLower },
-      { email: emailLower },
-      { 'parent.email': emailLower },
-    ],
-  });
 
   // Basis-Infos für Booking-Referenz
   const bookingDate = new Date(String(payload.date) + 'T00:00:00');
@@ -539,11 +555,44 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     offerType:   String(offer.type || ''),
     venue,
     date:        isNaN(bookingDate.getTime()) ? null : bookingDate,
-    status:      'active', // laufende Teilnahme
+    status:      'active',
     priceAtBooking: typeof offer.price === 'number' ? offer.price : null,
   };
 
-  // 2) Wenn kein Customer → neu anlegen
+  let customer = null;
+
+  /* 1) Zuerst: nach Eltern-E-Mail suchen (wenn E-Mail vorhanden) */
+  if (emailLower) {
+    customer = await Customer.findOne({
+      owner: ownerId,
+      $or: [
+        { emailLower },
+        { email: emailLower },
+        { 'parent.email': emailLower },
+      ],
+    });
+  }
+
+  /* 2) Falls kein Treffer: nach Kind suchen (Name + Geburtsdatum) */
+  if (!customer && (childFromForm.firstName || childFromForm.lastName)) {
+    const candidates = await Customer.find({ owner: ownerId })
+      .select('child children email emailLower parent bookings')
+      .lean(); // nur leichte Docs
+
+    const match = candidates.find((c) => {
+      const mainChildMatch = hasSameChild(c.child, childFromForm);
+      const anyChildMatch = Array.isArray(c.children) &&
+        c.children.some((ch) => hasSameChild(ch, childFromForm));
+      return mainChildMatch || anyChildMatch;
+    });
+
+    if (match) {
+      // echtes Mongoose-Dokument nachladen
+      customer = await Customer.findById(match._id);
+    }
+  }
+
+  /* 3) Wenn immer noch kein Customer → neuen anlegen */
   if (!customer) {
     await Customer.syncCounterWithExisting(ownerId);
     const nextUserId = await Customer.nextUserIdForOwner(ownerId);
@@ -559,16 +608,14 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
       owner: ownerId,
       userId: nextUserId,
 
-      email: emailLower,
-      emailLower,
+      email: emailLower || undefined,
+      emailLower: emailLower || undefined,
       newsletter: false,
 
       parent: {
-        email: emailLower,
-        // Falls du später Elternnamen im Formular hast, können wir die hier ergänzen
+        email: emailLower || undefined,
       },
 
-      // erstes Kind in "child" UND in "children[0]"
       child,
       children: child.firstName || child.lastName ? [child] : [],
 
@@ -580,17 +627,16 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     return customer;
   }
 
-  // 3) Customer existiert → ggf. fehlende userId vergeben
+  /* 4) Customer existiert → ggf. fehlende userId vergeben */
   if (customer.userId == null) {
     await Customer.assignUserIdIfMissing(customer);
   }
 
-  // 4) Child-Liste vorbereiten
+  /* 5) Child-Liste vorbereiten und ggf. neues Kind anhängen */
   if (!Array.isArray(customer.children)) {
     customer.children = [];
   }
 
-  // falls das alte Feld "child" gefüllt ist, aber children leer → einmalig übernehmen
   if (
     customer.child &&
     (customer.child.firstName || customer.child.lastName) &&
@@ -604,13 +650,11 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     });
   }
 
-  // 5) Prüfen, ob dieses Kind schon existiert
   const hasChild =
     hasSameChild(customer.child, childFromForm) ||
     customer.children.some((c) => hasSameChild(c, childFromForm));
 
   if (!hasChild && (childFromForm.firstName || childFromForm.lastName)) {
-    // neues Kind anhängen
     customer.children.push({
       firstName: childFromForm.firstName,
       lastName:  childFromForm.lastName,
@@ -618,31 +662,58 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
       club:      childFromForm.club,
     });
 
-    // falls noch kein "Haupt-Kind" gesetzt ist → dieses Kind als Haupt-Kind übernehmen
     if (!customer.child || (!customer.child.firstName && !customer.child.lastName)) {
       customer.child = customer.children[0];
     }
   }
 
-  // 6) BookingRef nur hinzufügen, wenn er noch nicht existiert
-  const already = customer.bookings?.some(
+  /* 6) BookingRef nur hinzufügen, wenn noch nicht vorhanden */
+  if (!Array.isArray(customer.bookings)) {
+    customer.bookings = [];
+  }
+
+  const already = customer.bookings.some(
     (b) =>
       String(b.offerId) === String(offer._id) &&
       String(b.bookingId) === String(bookingDoc._id)
   );
+
   if (!already) {
     customer.bookings.push(bookingRef);
   }
 
-  // Basis-Felder sauber halten
-  if (!customer.emailLower) customer.emailLower = emailLower;
-  if (!customer.email) customer.email = emailLower;
-  if (!customer.parent) customer.parent = {};
-  if (!customer.parent.email) customer.parent.email = emailLower;
+  /* 7) Basis-Felder sauber halten (aber nichts überschreiben, was schon da ist) */
+  if (emailLower) {
+    if (!customer.emailLower) customer.emailLower = emailLower;
+    if (!customer.email)      customer.email      = emailLower;
+    if (!customer.parent)     customer.parent     = {};
+    if (!customer.parent.email) customer.parent.email = emailLower;
+  }
 
   await customer.save();
   return customer;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1203,12 +1274,21 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
       });
     }
 
-    // Status -> cancelled
-    booking.status = 'cancelled';
-    booking.cancelledAt = new Date();
-    await booking.save();
 
-    // Offer + Customer laden
+
+
+
+
+    
+
+        const cancelAt = new Date();
+
+    // Status -> cancelled
+    booking.status      = 'cancelled';
+    booking.cancelledAt = cancelAt;
+    booking.cancelDate  = booking.cancelDate || cancelAt;
+
+    // Offer + Customer laden (für Betrags- und Ref-Update)
     const offer = booking.offerId
       ? await Offer.findOne({ _id: booking.offerId, owner: ownerId }).lean()
       : null;
@@ -1217,6 +1297,58 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
       owner: ownerId,
       'bookings.bookingId': booking._id,
     });
+
+    // Storno-Daten vorbereiten
+    const amount =
+      typeof booking.priceAtBooking === 'number'
+        ? booking.priceAtBooking
+        : typeof offer?.price === 'number'
+          ? offer.price
+          : null;
+
+    if (!booking.stornoNo) {
+      booking.stornoNo = formatStornoNo(); // z.B. "STORNO-925CF4"
+    }
+    if (amount != null) {
+      booking.stornoAmount = amount;
+    }
+
+    // Spiegelung in customer.bookings
+    if (customer) {
+      const ref = customer.bookings.find(
+        (b) => String(b.bookingId) === String(booking._id)
+      );
+
+      if (ref) {
+        ref.status      = 'cancelled';
+        ref.cancelDate  = ref.cancelDate || cancelAt;
+        ref.cancelReason =
+          req.body && req.body.note != null
+            ? String(req.body.note || '')
+            : ref.cancelReason || '';
+
+        // Storno-Felder auch im Subdoc
+        ref.stornoNo = ref.stornoNo || booking.stornoNo;
+        if (amount != null) {
+          ref.stornoAmount = amount;
+        }
+
+        await customer.save();
+      }
+    }
+
+    await booking.save();
+
+
+
+
+
+
+
+
+
+
+
 
     const isNonTrial = isNonTrialProgram(offer);
 
@@ -1282,7 +1414,6 @@ router.post('/:id/cancel-confirmed', adminAuth, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
-
 
 
 
