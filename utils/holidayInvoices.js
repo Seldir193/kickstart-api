@@ -26,12 +26,49 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
   }
 
   // 2) passende Booking-Ref im Customer
-  const ref = customer.bookings.find(
+
+
+
+
+
+    let ref = customer.bookings.find(
     (b) => String(b.bookingId) === String(booking._id)
   );
+
+  // Falls noch kein Booking-Ref existiert → hier nachziehen
   if (!ref) {
-    console.warn('[holidayInvoice] no bookingRef in customer for booking', String(booking._id));
+    const bookingDate =
+      booking.date ? new Date(booking.date) : booking.createdAt || new Date();
+
+    const venue =
+      typeof offer?.location === 'string'
+        ? offer.location
+        : offer?.location?.name || offer?.location?.title || '';
+
+    customer.bookings.push({
+      bookingId:   booking._id,
+      offerId:     offer?._id || booking.offerId,
+      offerTitle:  offer?.title || offer?.sub_type || offer?.type || booking.offerTitle || '',
+      offerType:   offer?.sub_type || offer?.type || booking.offerType || '',
+      venue,
+      date:        isNaN(bookingDate.getTime()) ? null : bookingDate,
+      status:      'active',
+      priceAtBooking:
+        typeof booking.priceAtBooking === 'number'
+          ? booking.priceAtBooking
+          : typeof offer?.price === 'number'
+            ? offer.price
+            : null,
+    });
+
+    ref = customer.bookings[customer.bookings.length - 1];
   }
+
+
+
+
+
+
 
   // 3) Preis bestimmen (Einmalpreis = aktueller Offer-Preis, Fallback: booking.priceAtBooking)
   const amount =
@@ -108,6 +145,8 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
 
   const invoiceNo   = normalizeInvoiceNo(rawNo);
   const invoiceDate = booking.invoiceDate || now;
+
+
 
   // 5) Booking-Snapshot aktualisieren
   booking.invoiceNumber  = invoiceNo;
@@ -207,3 +246,9 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
 module.exports = {
   createHolidayInvoiceForBooking,
 };
+
+
+
+
+
+
