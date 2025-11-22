@@ -162,8 +162,37 @@ router.get('/:id', async (req, res) => {
 /* ======= CREATE ======= */
 router.post('/', async (req, res) => {
   try {
-    const owner = requireOwner(req, res); if (!owner) return;
+        const owner = requireOwner(req, res); if (!owner) return;
     const b = req.body || {};
+
+    // 🔒 Duplikate verhindern: gleicher Parent-Name + E-Mail
+    const parentEmail = String(b.parent?.email || '').trim().toLowerCase();
+    const parentFirst = String(b.parent?.firstName || '').trim().toLowerCase();
+    const parentLast  = String(b.parent?.lastName  || '').trim().toLowerCase();
+
+    if (parentEmail) {
+      const existing = await Customer.findOne({
+        owner,
+        $or: [
+          { emailLower: parentEmail },
+          { email: parentEmail },
+          { 'parent.email': parentEmail },
+        ],
+      }).lean();
+
+      if (existing) {
+        return res.status(409).json({
+          ok: false,
+          error: 'CUSTOMER_EXISTS',
+          message: 'Ein Kunde mit dieser E-Mail ist bereits vorhanden.',
+          customerId: existing._id,
+        });
+      }
+    }
+
+
+    //const owner = requireOwner(req, res); if (!owner) return;
+    //const b = req.body || {};
 
     const errors = {};
     if (!b.child?.firstName) errors.childFirstName = 'required';
@@ -1135,6 +1164,11 @@ function parseDate(d) {
 
 
 
+
+
+
+
+
 /** GET /api/customers/:id/documents */
 router.get('/:id/documents', async (req, res) => {
   try {
@@ -1225,9 +1259,6 @@ router.get('/:id/documents', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-
-
-
 
 
 
@@ -1384,6 +1415,12 @@ router.get('/:id/documents.csv', async (req, res) => {
     res.write(headers.join(',') + '\n');
 
 
+
+
+
+
+
+
     for (const d of filtered) {
   const b = (customer.bookings || []).find(x => String(x._id) === d.bookingId) || {};
   const offer = (b.offerId && offerById.get(String(b.offerId))) || null;
@@ -1392,7 +1429,7 @@ router.get('/:id/documents.csv', async (req, res) => {
   const offerType  = b.offerType  || offer?.sub_type || offer?.type || '';
   const venue      = b.venue      || offer?.location || '';
 
-  const isPart   = d.type === 'participation';
+const isPart   = d.type === 'participation';
   const isCanc   = d.type === 'cancellation';
   const isStorno = d.type === 'storno';
 
@@ -1431,6 +1468,10 @@ router.get('/:id/documents.csv', async (req, res) => {
 
   // 💡 Preis-Spalte im globalen CSV ist bei participation LEER
   const priceForCsv = isPart ? '' : (typeof basePrice === 'number' ? basePrice : '');
+
+
+
+  
 
   const row = [
     // Basis
@@ -1477,16 +1518,12 @@ router.get('/:id/documents.csv', async (req, res) => {
 }
 
 
-
-
     res.end();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
-
-
 
 
 
@@ -1502,6 +1539,10 @@ async function runWithConcurrency(items, limit, worker) {
   });
   await Promise.all(runners);
 }
+
+
+
+
 
 router.get('/:id/documents.zip', async (req, res) => {
   try {
@@ -1743,3 +1784,19 @@ router.patch('/:id/newsletter', async (req, res) => {
 
 
 module.exports = router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
