@@ -18,7 +18,7 @@ const { createHolidayInvoiceForBooking } = require('../utils/holidayInvoices');
 
 
 const { formatStornoNo } = require('../utils/sequences');
-
+const { findBaseCustomerForChild, createCustomerForNewParent } = require('../utils/relations');
 
 
 //const { buildParticipationPdf } = require('../utils/pdf');
@@ -474,13 +474,11 @@ function buildFilter(query, ownerId) {
 
 
 
-
-
-
-
-
-
 /* ---------- Customer-Helper ---------- */
+
+function normalizeEmail(v) {
+  return String(v || '').trim().toLowerCase();
+}
 
 // Kind aus Payload extrahieren
 function extractChildFromPayload(payload) {
@@ -532,13 +530,42 @@ function hasSameChild(child, target) {
 
 /**
  * Sucht/legt Customer für eine Online-Buchung an.
- * Regeln:
- * 1) Wenn Eltern-E-Mail existiert → diesen Customer verwenden.
- * 2) Sonst: nach Kind (Name + Geburtsdatum) suchen.
- * 3) Nur wenn nichts gefunden → neuen Customer anlegen.
+ *
+ * Erweiterung:
+ *  - Für POWERTRAINING:
+ *    * Kind wird über findBaseCustomerForChild gesucht (Base-Customer).
+ *    * Wenn Eltern-E-Mail NICHT zum Base-Customer passt → neuer Customer
+ *      mit createCustomerForNewParent, verknüpft über relatedCustomerIds.
+ *    * Wenn Eltern-E-Mail passt → Base-Customer wiederverwenden.
+ *
+ *  - Für alle anderen Programme bleibt das bisherige Verhalten bestehen:
+ *    1) Suchen über Eltern-E-Mail
+ *    2) Sonst über Kind
+ *    3) Sonst neuen Customer anlegen
  */
-async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload }) {
-  const emailLower = String(payload.email || '').trim().toLowerCase();
+/**
+ * Sucht/legt Customer für eine Online-Buchung an.
+ *
+ * Erweiterung:
+ *  - Für HOLIDAY-Programme (Camp + Powertraining):
+ *    * Kind wird über findBaseCustomerForChild gesucht (Base-Customer).
+ *    * Wenn Eltern-E-Mail NICHT zum Base-Customer passt → neuer Customer
+ *      mit createCustomerForNewParent, verknüpft über relatedCustomerIds.
+ *    * Wenn Eltern-E-Mail passt → Base-Customer wiederverwenden.
+ *
+ *  - Für alle anderen Programme bleibt das bisherige Verhalten bestehen:
+ *    1) Suchen über Eltern-E-Mail
+ *    2) Sonst über Kind
+ *    3) Sonst neuen Customer anlegen
+ */
+async function upsertCustomerForBooking({
+  ownerId,
+  offer,
+  bookingDoc,
+  payload,
+  isPowertraining = false, // wird weiter unterstützt, aber intern ergänzt
+}) {
+  const emailLower    = normalizeEmail(payload.email);
   const childFromForm = extractChildFromPayload(payload);
 
   // Basis-Infos für Booking-Referenz
@@ -561,8 +588,73 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
 
   let customer = null;
 
-  /* 1) Zuerst: nach Eltern-E-Mail suchen (wenn E-Mail vorhanden) */
-  if (emailLower) {
+  /* =========================================================
+   * SPEZIALLOGIK FÜR HOLIDAY (Camp + Powertraining)
+   * ======================================================= */
+
+  // zusätzlich zum übergebenen Flag auch anhand des Offers erkennen
+  const isPowerByOffer = isPowertrainingOffer(offer);
+  const isCampByOffer  = isCampOffer(offer);
+
+  // wir wollen die „Familien-Logik“ für Camp UND Powertraining anwenden
+  const useHolidayFamilyMode =
+    isPowertraining || isPowerByOffer || isCampByOffer;
+
+  if (
+    useHolidayFamilyMode &&
+    (childFromForm.firstName || childFromForm.lastName)
+  ) {
+    // 1) Base-Customer für dieses Kind suchen
+    const baseCustomer = await findBaseCustomerForChild({
+      ownerId,
+      childFirstName: childFromForm.firstName,
+      childLastName:  childFromForm.lastName,
+      childBirthDate: childFromForm.birthDate,
+    });
+
+    const parentEmail = emailLower;
+
+    if (baseCustomer) {
+      const baseParentEmail = normalizeEmail(baseCustomer.parent?.email);
+
+      const isSameParent =
+        parentEmail && baseParentEmail && parentEmail === baseParentEmail;
+
+      if (isSameParent) {
+        // gleicher Elternteil → Base-Customer wiederverwenden
+        customer = baseCustomer;
+      } else {
+        // anderer Elternteil → neuer Customer, aber mit Relation + Kind-Kopie
+        customer = await createCustomerForNewParent({
+          ownerId,
+          baseCustomer,
+          parentData: {
+            salutation: payload.parent?.salutation || '',
+            firstName:  payload.parent?.firstName || '',
+            lastName:   payload.parent?.lastName || '',
+            email:      parentEmail,
+            phone:      payload.parent?.phone || '',
+            phone2:     payload.parent?.phone2 || '',
+          },
+          childDataOverride: {
+            firstName: childFromForm.firstName,
+            lastName:  childFromForm.lastName,
+            birthDate: childFromForm.birthDate,
+            gender:    payload.child?.gender || '',
+            club:      payload.child?.club || childFromForm.club || '',
+          },
+        });
+      }
+    }
+    // Wenn KEIN baseCustomer gefunden wurde, laufen wir unten in die Standard-Logik.
+  }
+
+  /* =========================================================
+   * STANDARD-LOGIK (für alle Programme + Fallback)
+   * ======================================================= */
+
+  // 1) Zuerst: nach Eltern-E-Mail suchen (wenn noch kein Customer gesetzt)
+  if (!customer && emailLower) {
     customer = await Customer.findOne({
       owner: ownerId,
       $or: [
@@ -573,16 +665,17 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     });
   }
 
-  /* 2) Falls kein Treffer: nach Kind suchen (Name + Geburtsdatum) */
+  // 2) Falls kein Treffer: nach Kind suchen (Name + Geburtsdatum)
   if (!customer && (childFromForm.firstName || childFromForm.lastName)) {
     const candidates = await Customer.find({ owner: ownerId })
       .select('child children email emailLower parent bookings')
-      .lean(); // nur leichte Docs
+      .lean();
 
-    const match = candidates.find((c) => {
+    const match = candidates.find(c => {
       const mainChildMatch = hasSameChild(c.child, childFromForm);
-      const anyChildMatch = Array.isArray(c.children) &&
-        c.children.some((ch) => hasSameChild(ch, childFromForm));
+      const anyChildMatch =
+        Array.isArray(c.children) &&
+        c.children.some(ch => hasSameChild(ch, childFromForm));
       return mainChildMatch || anyChildMatch;
     });
 
@@ -592,7 +685,7 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     }
   }
 
-  /* 3) Wenn immer noch kein Customer → neuen anlegen */
+  // 3) Wenn immer noch kein Customer → neuen anlegen
   if (!customer) {
     await Customer.syncCounterWithExisting(ownerId);
     const nextUserId = await Customer.nextUserIdForOwner(ownerId);
@@ -608,7 +701,7 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
       owner: ownerId,
       userId: nextUserId,
 
-      email: emailLower || undefined,
+      email:      emailLower || undefined,
       emailLower: emailLower || undefined,
       newsletter: false,
 
@@ -627,12 +720,12 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     return customer;
   }
 
-  /* 4) Customer existiert → ggf. fehlende userId vergeben */
+  // 4) Customer existiert → ggf. fehlende userId vergeben
   if (customer.userId == null) {
     await Customer.assignUserIdIfMissing(customer);
   }
 
-  /* 5) Child-Liste vorbereiten und ggf. neues Kind anhängen */
+  // 5) Child-Liste vorbereiten und ggf. neues Kind anhängen
   if (!Array.isArray(customer.children)) {
     customer.children = [];
   }
@@ -650,11 +743,11 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
     });
   }
 
-  const hasChild =
+  const hasChildAlready =
     hasSameChild(customer.child, childFromForm) ||
-    customer.children.some((c) => hasSameChild(c, childFromForm));
+    customer.children.some(c => hasSameChild(c, childFromForm));
 
-  if (!hasChild && (childFromForm.firstName || childFromForm.lastName)) {
+  if (!hasChildAlready && (childFromForm.firstName || childFromForm.lastName)) {
     customer.children.push({
       firstName: childFromForm.firstName,
       lastName:  childFromForm.lastName,
@@ -662,37 +755,63 @@ async function upsertCustomerForBooking({ ownerId, offer, bookingDoc, payload })
       club:      childFromForm.club,
     });
 
-    if (!customer.child || (!customer.child.firstName && !customer.child.lastName)) {
+    if (
+      !customer.child ||
+      (!customer.child.firstName && !customer.child.lastName)
+    ) {
       customer.child = customer.children[0];
     }
   }
 
-  /* 6) BookingRef nur hinzufügen, wenn noch nicht vorhanden */
+  // 6) BookingRef nur hinzufügen, wenn noch nicht vorhanden
   if (!Array.isArray(customer.bookings)) {
     customer.bookings = [];
   }
 
   const already = customer.bookings.some(
-    (b) =>
+    b =>
       String(b.offerId) === String(offer._id) &&
-      String(b.bookingId) === String(bookingDoc._id)
+      String(b.bookingId) === String(bookingDoc._id),
   );
 
   if (!already) {
     customer.bookings.push(bookingRef);
   }
 
-  /* 7) Basis-Felder sauber halten (aber nichts überschreiben, was schon da ist) */
+  // 7) Basis-Felder sauber halten (aber nichts überschreiben, was schon da ist)
   if (emailLower) {
-    if (!customer.emailLower) customer.emailLower = emailLower;
-    if (!customer.email)      customer.email      = emailLower;
-    if (!customer.parent)     customer.parent     = {};
-    if (!customer.parent.email) customer.parent.email = emailLower;
+    if (!customer.emailLower)      customer.emailLower      = emailLower;
+    if (!customer.email)           customer.email           = emailLower;
+    if (!customer.parent)          customer.parent          = {};
+    if (!customer.parent.email)    customer.parent.email    = emailLower;
   }
 
   await customer.save();
   return customer;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -848,7 +967,8 @@ router.post('/', async (req, res) => {
       adminNote: req.body.adminNote || '',
     });
 
-    // Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
+  
+        // Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
     //  – gilt für alle Programme inkl. Camp & Powertraining
     try {
       await upsertCustomerForBooking({
@@ -856,6 +976,7 @@ router.post('/', async (req, res) => {
         offer,
         bookingDoc: created,
         payload: req.body,
+        isPowertraining: isPower, // <--- NEU
       });
     } catch (custErr) {
       console.error(
@@ -863,6 +984,7 @@ router.post('/', async (req, res) => {
         custErr?.message || custErr
       );
     }
+
 
     // 1) Eingangsbestätigung (nur wenn NICHT Holiday)
     if (!isHoliday) {
