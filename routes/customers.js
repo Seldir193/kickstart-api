@@ -1,3 +1,15 @@
+
+
+
+
+
+
+
+
+
+
+
+
 // routes/customers.js
 'use strict';
 
@@ -26,6 +38,7 @@ const Booking  = require('../models/Booking'); // <-- hinzufügen
 
 
 const { syncCustomerNewsletter } = require('../services/marketingSync');
+const { hasSameChild } = require('../utils/relations');
 
 
 const archiver = require('archiver');
@@ -159,83 +172,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/* ======= CREATE ======= */
-router.post('/', async (req, res) => {
-  try {
-        const owner = requireOwner(req, res); if (!owner) return;
-    const b = req.body || {};
-
-    // 🔒 Duplikate verhindern: gleicher Parent-Name + E-Mail
-    const parentEmail = String(b.parent?.email || '').trim().toLowerCase();
-    const parentFirst = String(b.parent?.firstName || '').trim().toLowerCase();
-    const parentLast  = String(b.parent?.lastName  || '').trim().toLowerCase();
-
-    if (parentEmail) {
-      const existing = await Customer.findOne({
-        owner,
-        $or: [
-          { emailLower: parentEmail },
-          { email: parentEmail },
-          { 'parent.email': parentEmail },
-        ],
-      }).lean();
-
-      if (existing) {
-        return res.status(409).json({
-          ok: false,
-          error: 'CUSTOMER_EXISTS',
-          message: 'Ein Kunde mit dieser E-Mail ist bereits vorhanden.',
-          customerId: existing._id,
-        });
-      }
-    }
-
-
-    //const owner = requireOwner(req, res); if (!owner) return;
-    //const b = req.body || {};
-
-    const errors = {};
-    if (!b.child?.firstName) errors.childFirstName = 'required';
-    if (!b.child?.lastName)  errors.childLastName  = 'required';
-    if (!b.parent?.email)    errors.parentEmail    = 'required';
-    if (Object.keys(errors).length) return res.status(400).json({ errors });
-
-    const nextNo = await Customer.nextUserIdForOwner(owner);
-
-    const doc = await Customer.create({
-      owner,
-      userId: nextNo,
-      newsletter: !!b.newsletter,
-      address: {
-        street:  b.address?.street  || '',
-        houseNo: b.address?.houseNo || '',
-        zip:     b.address?.zip     || '',
-        city:    b.address?.city    || '',
-      },
-      child: {
-        firstName: b.child?.firstName || '',
-        lastName:  b.child?.lastName  || '',
-        gender:    ['weiblich','männlich'].includes(b.child?.gender) ? b.child.gender : '',
-        birthDate: b.child?.birthDate ? new Date(b.child.birthDate) : null,
-        club:      b.child?.club || '',
-      },
-      parent: {
-        salutation: ['Frau','Herr'].includes(b.parent?.salutation) ? b.parent.salutation : '',
-        firstName:  b.parent?.firstName || '',
-        lastName:   b.parent?.lastName  || '',
-        email:      b.parent?.email     || '',
-        phone:      b.parent?.phone     || '',
-        phone2:     b.parent?.phone2    || '',
-      },
-      notes:    b.notes || '',
-      bookings: Array.isArray(b.bookings) ? b.bookings : [],
-    });
-
-    res.status(201).json(doc);
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
 
 
 
@@ -1778,6 +1714,432 @@ router.patch('/:id/newsletter', async (req, res) => {
     res.status(500).json({ ok: false, error: 'Newsletter update failed' });
   }
 });
+
+
+
+
+
+
+
+
+
+/**
+ * POST /customers/:id/children
+ *
+ * Fügt dem angegebenen Customer ein weiteres Kind (Geschwisterkind) hinzu.
+ * Erwartet Body: { firstName, lastName, birthDate }
+ */
+router.post('/:id/children', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const id    = requireId(req, res);    if (!id)    return;
+
+    const { firstName, lastName, birthDate } = req.body || {};
+
+    if (!firstName && !lastName) {
+      return res.status(400).json({
+        ok: false,
+        error: 'INVALID_CHILD',
+        message: 'At least firstName or lastName is required for a child.',
+      });
+    }
+
+    const customer = await Customer.findOne({ _id: id, owner });
+    if (!customer) {
+      return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+
+    if (!Array.isArray(customer.children)) {
+      customer.children = [];
+    }
+
+    const newChild = {
+      firstName: String(firstName || ''),
+      lastName:  String(lastName  || ''),
+      birthDate: birthDate ? new Date(birthDate) : null,
+    };
+
+    // 👉 kein doppeltes Kind anlegen
+    const exists = customer.children.some((ch) => hasSameChild(ch, newChild));
+    if (!exists) {
+      customer.children.push(newChild);
+
+      // falls noch kein "Haupt-Kind" gesetzt ist, dieses übernehmen
+      if (!customer.child || (!customer.child.firstName && !customer.child.lastName)) {
+        customer.child = newChild;
+      }
+
+      await customer.save();
+    }
+
+    return res.json({
+      ok: true,
+      customerId: String(customer._id),
+      children: customer.children,
+    });
+  } catch (err) {
+    console.error('[customers/:id/children] error:', err);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+
+/**
+ * POST /customers/:id/family-members
+ *
+ * Legt einen neuen Customer als Elternteil/Guardian an (z.B. Oma)
+ * und verknüpft ihn über relatedCustomerIds mit dem Basis-Customer.
+ *
+ * Body (Beispiel):
+ * {
+ *   parent: { salutation, firstName, lastName, email, phone, phone2 },
+ *   copyChildFromBase: true | false,
+ *   childOverride?: { firstName, lastName, birthDate }
+ * }
+ */
+router.post('/:id/family-members', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const id    = requireId(req, res);    if (!id)    return;
+
+    const baseCustomer = await Customer.findOne({ _id: id, owner });
+    if (!baseCustomer) {
+      return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+
+    const body   = req.body || {};
+    const parent = body.parent || {};
+
+    const sal     = ['Frau', 'Herr'].includes(parent.salutation) ? parent.salutation : '';
+    const pFirst  = String(parent.firstName || '').trim();
+    const pLast   = String(parent.lastName  || '').trim();
+    const pEmail  = String(parent.email     || '').trim();
+    const pPhone  = String(parent.phone     || '').trim();
+    const pPhone2 = String(parent.phone2    || '').trim();
+
+    if (!pFirst && !pLast && !pEmail) {
+      return res.status(400).json({
+        ok: false,
+        error: 'INVALID_PARENT',
+        message: 'At least name or email must be provided for the new parent.',
+      });
+    }
+
+    // Kind: entweder Override aus Body oder (optional) vom Basis-Customer kopieren
+    let childPayload = null;
+    if (body.childOverride) {
+      const co = body.childOverride;
+      childPayload = {
+        firstName: String(co.firstName || ''),
+        lastName:  String(co.lastName  || ''),
+        gender:    '',
+        birthDate: co.birthDate ? new Date(co.birthDate) : null,
+        club:      '',
+      };
+    } else if (body.copyChildFromBase) {
+      const baseChild =
+        baseCustomer.child ||
+        (Array.isArray(baseCustomer.children) && baseCustomer.children[0]) ||
+        null;
+      if (baseChild) {
+        childPayload = {
+          firstName: baseChild.firstName || '',
+          lastName:  baseChild.lastName  || '',
+          gender:    baseChild.gender    || '',
+          birthDate: baseChild.birthDate ? new Date(baseChild.birthDate) : null,
+          club:      baseChild.club      || '',
+        };
+      }
+    }
+
+    const newDoc = await Customer.create({
+      owner,
+      userId: await Customer.nextUserIdForOwner(owner),
+      newsletter: false,
+      address: {
+        street:  '',
+        houseNo: '',
+        zip:     '',
+        city:    '',
+      },
+      child: childPayload,
+      parent: {
+        salutation: sal,
+        firstName:  pFirst,
+        lastName:   pLast,
+        email:      pEmail,
+        phone:      pPhone,
+        phone2:     pPhone2,
+      },
+      notes: '',
+      bookings: [],
+      relatedCustomerIds: [baseCustomer._id],
+    });
+
+    // Backlink beim Basis-Customer setzen
+    const rels = new Set(
+      (baseCustomer.relatedCustomerIds || []).map((x) => String(x))
+    );
+    rels.add(String(newDoc._id));
+    baseCustomer.relatedCustomerIds = Array.from(rels);
+    await baseCustomer.save();
+
+    return res.status(201).json({
+      ok: true,
+      baseCustomerId: String(baseCustomer._id),
+      newMemberId: String(newDoc._id),
+      member: {
+        _id: String(newDoc._id),
+        userId: newDoc.userId,
+        parent: {
+          salutation: newDoc.parent?.salutation || '',
+          firstName:  newDoc.parent?.firstName  || '',
+          lastName:   newDoc.parent?.lastName   || '',
+          email:      newDoc.parent?.email      || '',
+        },
+        child: newDoc.child || null,
+        children: Array.isArray(newDoc.children) ? newDoc.children : [],
+      },
+    });
+  } catch (err) {
+    console.error('[customers/:id/family-members] error:', err);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+// ganz oben im File hast du schon:
+// const mongoose = require('mongoose');
+// const Customer = require('../models/Customer');
+
+router.get('/:id/family', async (req, res) => {
+  try {
+    const ownerId = req.get('x-provider-id') || req.get('X-Provider-Id');
+    const rawId = String(req.params.id || '').trim();
+
+    if (!ownerId || !mongoose.isValidObjectId(ownerId)) {
+      return res
+        .status(401)
+        .json({ ok: false, error: 'Unauthorized: invalid provider' });
+    }
+    if (!mongoose.isValidObjectId(rawId)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'Invalid customer id' });
+    }
+
+    const owner = new mongoose.Types.ObjectId(ownerId);
+    const baseId = new mongoose.Types.ObjectId(rawId);
+
+    // Basis-Kunde holen
+    const baseCustomer = await Customer.findOne({ _id: baseId, owner }).lean();
+    if (!baseCustomer) {
+      return res
+        .status(404)
+        .json({ ok: false, error: 'Customer not found' });
+    }
+
+    // ---------- NEU: gesamte Familie per kleiner BFS holen ----------
+    const seen = new Set();
+    const queue = [String(baseCustomer._id)];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId || seen.has(currentId)) continue;
+      seen.add(currentId);
+
+      // 1) aktuellen Customer mit seinen direkten Links
+      const current = await Customer.findOne({
+        _id: new mongoose.Types.ObjectId(currentId),
+        owner,
+      })
+        .select('_id relatedCustomerIds')
+        .lean();
+
+      if (!current) continue;
+
+      const forward = (current.relatedCustomerIds || []).map((x) => String(x));
+      for (const rid of forward) {
+        if (!seen.has(rid)) queue.push(rid);
+      }
+
+      // 2) Backlinks: alle, die currentId in relatedCustomerIds haben
+      const backLinks = await Customer.find({
+        owner,
+        relatedCustomerIds: current._id,
+      })
+        .select('_id')
+        .lean();
+
+      for (const b of backLinks) {
+        const bid = String(b._id);
+        if (!seen.has(bid)) queue.push(bid);
+      }
+    }
+
+    const allIds = Array.from(seen).map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const members = await Customer.find({
+      owner,
+      _id: { $in: allIds },
+    })
+      .select(
+        '_id userId parent child children email emailLower relatedCustomerIds'
+      )
+      .lean();
+
+    const normalizedMembers = members.map((m) => {
+      const childs = Array.isArray(m.children) ? m.children : [];
+      const primaryChild = m.child || null;
+
+      const childrenNormalized = childs.length
+        ? childs
+        : primaryChild
+        ? [primaryChild]
+        : [];
+
+      return {
+        _id: String(m._id),
+        userId: m.userId ?? null,
+        parent: {
+          salutation: m.parent?.salutation || '',
+          firstName: m.parent?.firstName || '',
+          lastName: m.parent?.lastName || '',
+          email: m.parent?.email || m.email || '',
+        },
+        child: primaryChild,
+        children: childrenNormalized.map((ch) => ({
+          firstName: ch.firstName || '',
+          lastName: ch.lastName || '',
+          birthDate: ch.birthDate || null,
+        })),
+      };
+    });
+
+    return res.json({
+      ok: true,
+      baseCustomerId: String(baseCustomer._id),
+      members: normalizedMembers,
+    });
+  } catch (err) {
+    console.error('[customers/:id/family] error:', err);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+/* ======= CREATE ======= */
+router.post('/', async (req, res) => {
+  try {
+    const owner = requireOwner(req, res); if (!owner) return;
+    const b = req.body || {};
+
+    // optional: Familien-Kontext (neuer Familien-Member)
+    const familyOfRaw = b.familyOf;
+    const familyOf =
+      familyOfRaw && mongoose.isValidObjectId(familyOfRaw)
+        ? new Types.ObjectId(familyOfRaw)
+        : null;
+
+    // 🔒 Duplikate verhindern: gleicher Parent-Name + E-Mail
+    // ABER: nur für "normale" Kunden, NICHT für familyOf (Geschwister/Oma/Opa)
+    const parentEmail = String(b.parent?.email || '').trim().toLowerCase();
+    const parentFirst = String(b.parent?.firstName || '').trim().toLowerCase();
+    const parentLast  = String(b.parent?.lastName  || '').trim().toLowerCase();
+
+    if (!familyOf && parentEmail) {
+      const existing = await Customer.findOne({
+        owner,
+        $or: [
+          { emailLower: parentEmail },
+          { email: parentEmail },
+          { 'parent.email': parentEmail },
+        ],
+      }).lean();
+
+      if (existing) {
+        return res.status(409).json({
+          ok: false,
+          error: 'CUSTOMER_EXISTS',
+          message: 'Ein Kunde mit dieser E-Mail ist bereits vorhanden.',
+          customerId: existing._id,
+        });
+      }
+    }
+
+    const errors = {};
+    if (!b.child?.firstName) errors.childFirstName = 'required';
+    if (!b.child?.lastName)  errors.childLastName  = 'required';
+    if (!b.parent?.email)    errors.parentEmail    = 'required';
+    if (Object.keys(errors).length) {
+      return res.status(400).json({ errors });
+    }
+
+    // fortlaufende Kundennummer
+    const nextNo = await Customer.nextUserIdForOwner(owner);
+
+    const doc = await Customer.create({
+      owner,
+      userId: nextNo,
+      newsletter: !!b.newsletter,
+      address: {
+        street:  b.address?.street  || '',
+        houseNo: b.address?.houseNo || '',
+        zip:     b.address?.zip     || '',
+        city:    b.address?.city    || '',
+      },
+      child: {
+        firstName: b.child?.firstName || '',
+        lastName:  b.child?.lastName  || '',
+        gender:    ['weiblich','männlich'].includes(b.child?.gender) ? b.child.gender : '',
+        birthDate: b.child?.birthDate ? new Date(b.child.birthDate) : null,
+        club:      b.child?.club || '',
+      },
+      parent: {
+        salutation: ['Frau','Herr'].includes(b.parent?.salutation) ? b.parent.salutation : '',
+        firstName:  b.parent?.firstName || '',
+        lastName:   b.parent?.lastName  || '',
+        email:      b.parent?.email     || '',
+        phone:      b.parent?.phone     || '',
+        phone2:     b.parent?.phone2    || '',
+      },
+      notes:    b.notes || '',
+      bookings: Array.isArray(b.bookings) ? b.bookings : [],
+      // 🔗 Family-Link: neuer Member zeigt auf Basis-Kunden
+      relatedCustomerIds: familyOf ? [familyOf] : (Array.isArray(b.relatedCustomerIds) ? b.relatedCustomerIds : []),
+    });
+
+    // Wenn es ein Familien-Member ist → Basis-Kunde aktualisieren (Backlink)
+    if (familyOf) {
+      await Customer.updateOne(
+        { _id: familyOf, owner },
+        { $addToSet: { relatedCustomerIds: doc._id } }
+      );
+    }
+
+    res.status(201).json(doc);
+  } catch (err) {
+    console.error('[customers:POST] error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
 
 
 
