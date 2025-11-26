@@ -27,7 +27,11 @@ const BookingSchema = new Schema({
   },
 
   /* Tenant / Provider */
-  owner:   { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true },
+  owner: { type: Types.ObjectId, ref: 'AdminUser', required: true, index: true },
+
+  /* Referenzen */
+  customerId: { type: Types.ObjectId, ref: 'Customer', index: true },   // NEU: zugeordnetes Elternprofil
+  childId:    { type: Types.ObjectId, ref: 'Child',    index: true },   // NEU: konkretes Kind (Child-Model)
 
   /* Offer-Ref */
   offerId: { type: Types.ObjectId, ref: 'Offer', index: true },
@@ -38,9 +42,9 @@ const BookingSchema = new Schema({
   email:     { type: String, required: true, trim: true, lowercase: true, match: /.+@.+\..+/ },
   age:       { type: Number, required: true, min: 5, max: 19 },
 
-  date:      { type: String, required: true }, // 'yyyy-mm-dd'
-  level:     { type: String, enum: ['U8','U10','U12','U14','U16','U18'], required: true },
-  message:   { type: String, default: '' },
+  date:    { type: String, required: true }, // 'yyyy-mm-dd'
+  level:   { type: String, enum: ['U8','U10','U12','U14','U16','U18'], required: true },
+  message: { type: String, default: '' },
 
   /* Admin */
   status: {
@@ -50,15 +54,15 @@ const BookingSchema = new Schema({
     index: true,
   },
 
-   previousStatus: {
+  previousStatus: {
     type: String,
     enum: ['pending', 'processing', 'confirmed', 'cancelled', 'deleted'],
     default: null,
   },
 
   confirmationCode: { type: String, unique: true, sparse: true },
-  confirmedAt: { type: Date },
-  adminNote:   { type: String, default: '' },
+  confirmedAt:      { type: Date },
+  adminNote:        { type: String, default: '' },
 
   /* Accounting / Preise */
   priceAtBooking: { type: Number },
@@ -81,8 +85,8 @@ const BookingSchema = new Schema({
   stornoAmount: { type: Number },
 
   newsletterToken:        { type: String, default: null },
-newsletterTokenExpires: { type: Date,   default: null },
-newsletterUnsubToken:   { type: String, default: null },
+  newsletterTokenExpires: { type: Date,   default: null },
+  newsletterUnsubToken:   { type: String, default: null },
 
 }, { timestamps: true });
 
@@ -99,7 +103,6 @@ BookingSchema.index({ owner: 1, createdAt: -1 });
 BookingSchema.index({ status: 1, createdAt: -1 });
 
 /**
- * WICHTIG:
  * Partial-Unique-Index, damit mehrere Dokumente ohne invoiceNumber erlaubt sind.
  * Greift nur, wenn invoiceNumber existiert und NICHT leer ist.
  */
@@ -110,12 +113,5 @@ BookingSchema.index(
 
 // export
 module.exports = models.Booking || model('Booking', BookingSchema);
-
-
-
-
-
-
-
 
 
