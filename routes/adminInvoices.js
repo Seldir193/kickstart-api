@@ -145,7 +145,13 @@ function docsFromBooking(customer, b) {
     b.createdAt ||
     null;
 
-  if (cancNo || cancDate || String(b.status).toLowerCase() === 'cancelled') {
+  //if (cancNo || cancDate || String(b.status).toLowerCase() === 'cancelled') {
+    // Für Holiday-Programme (Camp/Powertraining) KEINE Kündigungsbestätigung
+  if (
+    !isHoliday &&
+    (cancNo || cancDate || String(b.status).toLowerCase() === 'cancelled')
+  ) {
+
     items.push({
       id: `can:${b._id}`,
       bookingId: String(b._id),
