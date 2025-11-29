@@ -270,6 +270,11 @@ router.post('/', async (req, res) => {
       category: b.category ? String(b.category).trim() : '',
       sub_type: b.sub_type ? String(b.sub_type).trim() : '',
       legacy_type: b.legacy_type ? String(b.legacy_type).trim() : b.type,
+
+      // 🔹 NEU: Ferien-Felder
+      holidayWeekLabel: b.holidayWeekLabel ? String(b.holidayWeekLabel).trim() : '',
+      dateFrom: b.dateFrom ? String(b.dateFrom).trim() : '',
+      dateTo:   b.dateTo   ? String(b.dateTo).trim()   : '',
     });
 
     return res.status(201).json(doc);
@@ -353,6 +358,11 @@ router.put('/:id', async (req, res) => {
       category: b.category ? String(b.category).trim() : '',
       sub_type: b.sub_type ? String(b.sub_type).trim() : '',
       legacy_type: b.legacy_type ? String(b.legacy_type).trim() : b.type,
+
+      // 🔹 NEU: Ferien-Felder
+      holidayWeekLabel: b.holidayWeekLabel ? String(b.holidayWeekLabel).trim() : '',
+      dateFrom: b.dateFrom ? String(b.dateFrom).trim() : '',
+      dateTo:   b.dateTo   ? String(b.dateTo).trim()   : '',
     };
 
     // Build atomic update with optional unset
@@ -381,8 +391,6 @@ router.put('/:id', async (req, res) => {
 
 
 
-
-
 // PATCH /api/offers/:id  (partial update)
 router.patch('/:id', async (req, res) => {
   try {
@@ -399,7 +407,10 @@ router.patch('/:id', async (req, res) => {
       'placeId','location',
       'price','days','timeFrom','timeTo','ageFrom','ageTo',
       'info','onlineActive',
-      'coachName','coachEmail','coachImage'
+      'coachName','coachEmail','coachImage',
+
+      // 🔹 NEU
+      'holidayWeekLabel','dateFrom','dateTo',
     ];
 
     const update = {};
@@ -469,16 +480,25 @@ router.patch('/:id', async (req, res) => {
     if ('sub_type' in update)    ops.$set.sub_type   = String(update.sub_type || '').trim();
     if ('legacy_type' in update) ops.$set.legacy_type= String(update.legacy_type || '').trim();
 
- 
+    // 🔹 NEU: Ferien-Felder im PATCH
+    if ('holidayWeekLabel' in update) {
+      ops.$set.holidayWeekLabel = String(update.holidayWeekLabel || '').trim();
+    }
+    if ('dateFrom' in update) {
+      ops.$set.dateFrom = String(update.dateFrom || '').trim();
+    }
+    if ('dateTo' in update) {
+      ops.$set.dateTo = String(update.dateTo || '').trim();
+    }
 
     if ('type' in update || 'sub_type' in update || 'placeId' in update || 'location' in update) {
-   const t = offerDisplayName({
-     type: ('type' in update ? update.type : current.type),
-     sub_type: ('sub_type' in update ? update.sub_type : current.sub_type),
-   });
-   const loc = finalLocation || String(current.location || '');
-   ops.$set.title = [t, loc].filter(Boolean).join(' • ');
- }
+      const t = offerDisplayName({
+        type: ('type' in update ? update.type : current.type),
+        sub_type: ('sub_type' in update ? update.sub_type : current.sub_type),
+      });
+      const loc = finalLocation || String(current.location || '');
+      ops.$set.title = [t, loc].filter(Boolean).join(' • ');
+    }
 
     // leeren $unset entfernen
     if (Object.keys(ops.$unset).length === 0) delete ops.$unset;
@@ -518,5 +538,10 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+
+
 
 
