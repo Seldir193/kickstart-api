@@ -43,6 +43,11 @@ const OfferSchema = new Schema(
     sub_type: { type: String, default: '' },    // e.g. 'Torwarttraining', 'Foerdertraining_Athletik'
     legacy_type: { type: String, default: '' }, // mirrors type for backward compatibility
 
+   holidayWeekLabel: { type: String, trim: true, default: '' },
+
+  // Datumsbereich (Strings reichen hier, z.B. "2026-03-30")
+  dateFrom: { type: String, trim: true, default: '' }, // yyyy-mm-dd
+  dateTo:   { type: String, trim: true, default: '' }, 
     // im Schema:
 //capacity: { type: Number, min: 0, default: 0 }, // 0 = unbegrenzt
 
