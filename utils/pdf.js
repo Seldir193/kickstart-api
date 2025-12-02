@@ -69,9 +69,34 @@ function computeIsWeekly(offer) {
   return false;
 }
 
-/**
- * Participation / Rechnung PDF
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function buildParticipationPdf({
   customer,
   booking,
@@ -84,7 +109,7 @@ async function buildParticipationPdf({
 } = {}) {
   assertFn('buildParticipationPdfHTML');
 
-  // Basis-Shaping
+  // Basis-Shaping aus pdfData.js
   const shaped = shapeParticipationData({ customer, booking, offer });
 
   // ------------------------------------------------------------------
@@ -92,11 +117,10 @@ async function buildParticipationPdf({
   // ------------------------------------------------------------------
   const isWeekly = computeIsWeekly(offer);
 
-  // Stelle sicher, dass diese Objekte vorhanden sind
-  shaped.invoice = shaped.invoice || {};
-  shaped.pricing = shaped.pricing || {};
+  shaped.invoice  = shaped.invoice  || {};
+  shaped.pricing  = shaped.pricing  || {};
   shaped.customer = shaped.customer || {};
-  shaped.booking = shaped.booking || {};
+  shaped.booking  = shaped.booking  || {};
 
   // Currency Default
   const CURRENCY = String(shaped.invoice.currency || shaped.pricing.currency || 'EUR');
@@ -125,14 +149,9 @@ async function buildParticipationPdf({
     booking?.uhrzeit ||
     '';
 
-  // ------ Preislogik:
-  // Weekly:
-  //  - monthly = booking.monthlyAmount || invoice.monthly || offer.price
-  //  - firstMonth = booking.firstMonthAmount || invoice.firstMonth || pricing.firstMonth (falls gesetzt)
-  // Non-Weekly:
-  //  - oneOff = booking.priceAtBooking || invoice.oneOff || offer.price || invoice.monthly(/monthlyAmount) (Fallback)
   const offerPrice = (offer && typeof offer.price === 'number') ? offer.price : undefined;
 
+  // ===================== WEEKLY (Abo) =====================
   if (isWeekly) {
     // Standard Monatsgebühr
     const monthly =
@@ -145,7 +164,7 @@ async function buildParticipationPdf({
       shaped.pricing.monthly = monthly;
     }
 
-    // Erster Monat (pro rata wird ggf. woanders berechnet; hier nur übernehmen, wenn vorhanden)
+    // Erster Monat
     const firstMonth =
       (Number.isFinite(Number(shaped.booking.firstMonthAmount)) ? Number(shaped.booking.firstMonthAmount) : undefined) ??
       (Number.isFinite(Number(shaped.invoice.firstMonth)) ? Number(shaped.invoice.firstMonth) : undefined) ??
@@ -160,26 +179,75 @@ async function buildParticipationPdf({
     delete shaped.invoice.oneOff;
     delete shaped.pricing.oneOff;
   } else {
-    // Einmalpreis
+    // ===================== NON-WEEKLY (Camp / Holiday / etc) =====================
+
+    // Rabatte aus booking.meta ziehen
+    const meta = booking && typeof booking.meta === 'object' ? booking.meta : {};
+
+    const basePriceFromMeta =
+      typeof meta.basePrice === 'number'
+        ? meta.basePrice
+        : (typeof offerPrice === 'number' ? offerPrice : undefined);
+
+    const siblingDiscount =
+      typeof meta.siblingDiscount === 'number'
+        ? meta.siblingDiscount
+        : Number(meta.siblingDiscount) || 0;
+
+    const memberDiscount =
+      typeof meta.memberDiscount === 'number'
+        ? meta.memberDiscount
+        : Number(meta.memberDiscount) || 0;
+
+    const totalDiscountFromMeta =
+      typeof meta.totalDiscount === 'number'
+        ? meta.totalDiscount
+        : siblingDiscount + memberDiscount;
+
+    const basePrice = basePriceFromMeta ?? (Number.isFinite(Number(shaped.booking.priceAtBooking))
+      ? Number(shaped.booking.priceAtBooking)
+      : undefined);
+
+    const totalDiscount =
+      totalDiscountFromMeta != null
+        ? totalDiscountFromMeta
+        : (siblingDiscount + memberDiscount);
+
+    const finalPrice =
+      Number.isFinite(Number(booking?.priceAtBooking))
+        ? Number(booking.priceAtBooking) // hier steht schon dein rabattierter Preis
+        : (basePrice != null
+            ? Math.max(0, basePrice - totalDiscount)
+            : undefined);
+
+    // für Template den Rabatt-Block bereitstellen
+    shaped.booking.discount = {
+      basePrice:      basePrice ?? null,
+      siblingDiscount,
+      memberDiscount,
+      totalDiscount,
+      finalPrice:     finalPrice ?? basePrice ?? null,
+    };
+
+    // Einmalpreis, der in der Rechnung landet (invoice.single / pricing.single)
     const oneOff =
+      (Number.isFinite(Number(finalPrice)) ? Number(finalPrice) : undefined) ??
       (Number.isFinite(Number(shaped.booking.priceAtBooking)) ? Number(shaped.booking.priceAtBooking) : undefined) ??
       (Number.isFinite(Number(shaped.invoice.oneOff)) ? Number(shaped.invoice.oneOff) : undefined) ??
       (Number.isFinite(Number(offerPrice)) ? Number(offerPrice) : undefined) ??
-      // letzter Fallback: falls in Bestandsdaten nur "monthly" genutzt wurde, nimm diesen einmalig
+      // letzter Fallback: falls nur monthly benutzt wurde
       (Number.isFinite(Number(shaped.invoice.monthly)) ? Number(shaped.invoice.monthly) : undefined) ??
       (Number.isFinite(Number(shaped.invoice.monthlyAmount)) ? Number(shaped.invoice.monthlyAmount) : undefined) ??
       (Number.isFinite(Number(shaped.pricing.monthly)) ? Number(shaped.pricing.monthly) : undefined);
 
     if (oneOff != null) {
-      shaped.invoice.oneOff = oneOff;
-      shaped.pricing.oneOff = oneOff;
+      shaped.invoice.single = oneOff;
+      shaped.pricing.single = oneOff;
     }
 
-    // Nicht benötigte Monatswerte für's Template neutral halten
+    // Monatsfelder sind für Non-Weekly nicht relevant
     delete shaped.pricing.firstMonth;
     delete shaped.invoice.firstMonth;
-    // monthly im Template wird als Fallback genutzt – wir lassen es stehen,
-    // aber die HBS nutzt bei Non-Weekly primär pricing.oneOff/invoice.oneOff.
   }
 
   // Flag ins Booking UND Top-Level
@@ -188,8 +256,7 @@ async function buildParticipationPdf({
 
   // ------------------------------------------------------------------
   // → Renderer
-  // Wir geben isWeekly + pricing explizit mit – pdfHtml kann das direkt
-  // in den HBS-Context legen.
+  // ------------------------------------------------------------------
   return htmlRenderer.buildParticipationPdfHTML({
     customer: shaped.customer,
     booking : shaped.booking,
@@ -207,10 +274,24 @@ async function buildParticipationPdf({
   });
 }
 
+
+
+
+
 /* ==================== Cancellation PDF ==================== */
 
-async function buildCancellationPdf({ customer, booking, offer, date, endDate, reason,
-  cancellationNo, refInvoiceNo, refInvoiceDate, referenceInvoice } = {}) {
+async function buildCancellationPdf({
+  customer,
+  booking,
+  offer,
+  date,
+  endDate,
+  reason,
+  cancellationNo,
+  refInvoiceNo,
+  refInvoiceDate,
+  referenceInvoice,
+} = {}) {
   assertFn('buildCancellationPdfHTML');
 
   const shaped = shapeCancellationData({ customer, booking, offer, date, endDate, reason });
@@ -267,7 +348,7 @@ async function buildStornoPdf({
 
   const effAmount =
     Number.isFinite(Number(shaped.amount)) ? Number(shaped.amount)
-    : (offer && typeof offer.price === 'number' ? offer.price : 0);
+      : (offer && typeof offer.price === 'number' ? offer.price : 0);
 
   const curr = String(shaped.currency || 'EUR');
 
@@ -314,13 +395,6 @@ module.exports = {
   buildCancellationPdf,
   buildStornoPdf,
 };
-
-
-
-
-
-
-
 
 
 
