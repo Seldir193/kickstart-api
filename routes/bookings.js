@@ -18,7 +18,7 @@ const { createHolidayInvoiceForBooking } = require('../utils/holidayInvoices');
 
 
 const { formatStornoNo } = require('../utils/sequences');
-const { findBaseCustomerForChild, createCustomerForNewParent } = require('../utils/relations');
+const { findBaseCustomerForChild, createCustomerForNewParent,   } = require('../utils/relations');
 
 
 //const { buildParticipationPdf } = require('../utils/pdf');
@@ -57,6 +57,35 @@ const PROGRAM_FILTERS = [
   'club_trainingcamps',
   'club_coacheducation',
 ];
+
+
+function detectSiblingFlag(body = {}) {
+  const meta =
+    body.meta && typeof body.meta === 'object'
+      ? body.meta
+      : {};
+
+  // meta + top-level zusammenführen
+  const merged = { ...meta, ...body };
+
+  for (const [key, value] of Object.entries(merged)) {
+    const k = String(key).toLowerCase();
+
+    // nur Felder berücksichtigen, die "sibling" im Namen tragen
+    if (!k.includes('sibling')) continue;
+
+    if (value === true) return true;
+    if (typeof value === 'number') return value > 0;
+
+    if (typeof value === 'string') {
+      const v = value.trim().toLowerCase();
+      if (['1', 'true', 'yes', 'ja', 'on'].includes(v)) return true;
+      if (['0', 'false', 'no', 'nein', 'off'].includes(v)) return false;
+    }
+  }
+
+  return false;
+}
 
 // Mapping: ProgramFilter -> Offer-Query
 function buildOfferFilterForProgram(programKey) {
@@ -190,44 +219,47 @@ function isWeeklyOffer(offer) {
   );
 }
 
-// Prüft, ob dieses Kind einen laufenden Weekly-Kurs (status=confirmed) hat
-async function childHasActiveWeeklyBooking({ ownerId, firstName, lastName }) {
+
+
+
+
+
+async function childHasActiveWeeklyBooking({ ownerId, firstName, lastName, birthDate }) {
   const first = String(firstName || '').trim();
   const last  = String(lastName  || '').trim();
   if (!first || !last) return false;
 
-  // 1) relevante Weekly-Offers holen
-  const weeklyOfferIds = await Offer.find({
-    owner: ownerId,
-    $or: [
-      { category: 'Weekly' },
-      { type: 'Foerdertraining' },
-      { type: 'Kindergarten' },
-    ],
-  }).distinct('_id').exec();
+  // 1) "Base-Customer" für dieses Kind finden (über Name + optional Geburtsdatum)
+  const baseCustomer = await findBaseCustomerForChild({
+    ownerId,
+    childFirstName: first,
+    childLastName : last,
+    childBirthDate: birthDate || null,
+  });
 
-  if (!weeklyOfferIds.length) return false;
+  if (!baseCustomer || !Array.isArray(baseCustomer.bookings) || !baseCustomer.bookings.length) {
+    return false;
+  }
 
-  // 2) Booking mit gleichem Kind + confirmed-Status suchen
-  const firstRegex = new RegExp(`^${escapeRegex(first)}$`, 'i');
-  const lastRegex  = new RegExp(`^${escapeRegex(last)}$`, 'i');
+  // 2) In den Customer-BookingRefs nach einem laufenden Weekly-Kurs suchen
+  const hasWeeklyRef = baseCustomer.bookings.some((ref) => {
+    const status = String(ref.status || '').toLowerCase(); // "active" / "confirmed"
+    const type   = String(ref.offerType || ref.program || '').trim();
+    const cat    = String(ref.category || '').trim();
 
-  const existing = await Booking.findOne({
-    owner: ownerId,
-    offerId: { $in: weeklyOfferIds },
-    firstName: firstRegex,
-    lastName:  lastRegex,
-    status: 'confirmed', // nur wirklich laufende Kurse
-  }).lean();
+    const isWeeklyCategory = cat === 'Weekly';
+    const isWeeklyType =
+      type === 'Foerdertraining' ||
+      type === 'Kindergarten';
 
-  return !!existing;
+    const isRunning =
+      status === 'active' || status === 'confirmed';
+
+    return isRunning && (isWeeklyCategory || isWeeklyType);
+  });
+
+  return hasWeeklyRef;
 }
-
-
-
-
-
-
 
 
 
@@ -847,7 +879,15 @@ async function upsertCustomerForBooking({
 
 
 
-// z.B. in routes/bookings.js oder in einer helper-Datei
+
+
+
+
+
+
+
+
+
 
 
 // Create booking
@@ -891,6 +931,69 @@ router.post('/', async (req, res) => {
     const first = String(req.body.firstName || '').trim();
     const last  = String(req.body.lastName  || '').trim();
 
+    // 🔹 Geburtsdatum des Kindes – wichtig für Mitgliederrabatt,
+    //    unabhängig von den Eltern-Daten
+    const birthDateRaw =
+      req.body.childBirthDate ||
+      req.body.birthDate ||
+      (req.body.child && req.body.child.birthDate) ||
+      null;
+
+    // --- Camp Rabattsystem (Geschwister + Mitglied in Weekly) ----------------
+
+    // alles, was aus dem Public-Formular zusätzlich kommt
+    const metaFromBody =
+      req.body.meta && typeof req.body.meta === 'object'
+        ? req.body.meta
+        : {};
+
+    
+
+
+    // Geschwister-Flag robust erkennen (egal wie das Feld genau heißt)
+const hasSibling = detectSiblingFlag(req.body);
+
+
+ 
+
+    let siblingDiscount = 0;
+    let memberDiscount  = 0;
+
+    if (isCamp) {
+      // 1) Geschwisterrabatt, wenn im Formular angehakt
+      //    -> auch bei komplett neuen Kindern immer 14 €
+      if (hasSibling) {
+        siblingDiscount = 14;
+      }
+
+      // 2) Mitgliedsrabatt, wenn Kind einen laufenden Weekly-Kurs hat
+      //    (Abgleich über Kind: Name + optional Geburtsdatum)
+      const hasWeekly = await childHasActiveWeeklyBooking({
+        ownerId:   offer.owner,
+        firstName: first,
+        lastName:  last,
+        birthDate: birthDateRaw || null,
+      });
+
+      if (hasWeekly) {
+        memberDiscount = 14;
+      }
+    }
+
+    const totalDiscount = siblingDiscount + memberDiscount;
+
+    // Basispreis aus Offer
+    const basePrice =
+      typeof offer.price === 'number'
+        ? offer.price
+        : null;
+
+    // Nur bei Camp rabattieren, sonst Preis unverändert lassen
+    const finalPrice =
+      isCamp && basePrice != null
+        ? Math.max(0, basePrice - totalDiscount)
+        : basePrice;
+
     // --- DUPLICATE-Prüfung wie bisher (pro Offer + Name) --- //
     if (first && last) {
       const exists = await Booking.findOne({
@@ -915,9 +1018,10 @@ router.post('/', async (req, res) => {
     // --- SPEZIAL: POWERTRAINING nur für Kinder mit laufendem Weekly-Kurs --- //
     if (isPower) {
       const allowed = await childHasActiveWeeklyBooking({
-        ownerId: offer.owner,
+        ownerId:   offer.owner,
         firstName: first,
         lastName:  last,
+        birthDate: birthDateRaw || null,   // ⬅️ hier auch Geburtsdatum nutzen
       });
 
       if (!allowed) {
@@ -965,10 +1069,21 @@ router.post('/', async (req, res) => {
       message:   req.body.message ? String(req.body.message) : '',
       status:    'pending',
       adminNote: req.body.adminNote || '',
+
+      // wichtig für Rechnung:
+      priceAtBooking: finalPrice != null ? finalPrice : undefined,
+
+      // alles, was fürs PDF/Rechnung später interessant ist
+      meta: {
+        ...metaFromBody,
+        basePrice,        // ursprünglicher Camppreis (z.B. 129)
+        siblingDiscount,  // 14 oder 0
+        memberDiscount,   // 14 oder 0
+        totalDiscount,    // Summe der Rabatte
+      },
     });
 
-  
-        // Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
+    // Kunde upserten + fortlaufende userId vergeben + Buchung referenzieren
     //  – gilt für alle Programme inkl. Camp & Powertraining
     try {
       await upsertCustomerForBooking({
@@ -976,7 +1091,7 @@ router.post('/', async (req, res) => {
         offer,
         bookingDoc: created,
         payload: req.body,
-        isPowertraining: isPower, // <--- NEU
+        isPowertraining: isPower, // <--- weiterhin gesetzt
       });
     } catch (custErr) {
       console.error(
@@ -984,7 +1099,6 @@ router.post('/', async (req, res) => {
         custErr?.message || custErr
       );
     }
-
 
     // 1) Eingangsbestätigung (nur wenn NICHT Holiday)
     if (!isHoliday) {
@@ -1049,6 +1163,11 @@ router.post('/', async (req, res) => {
       .json({ ok: false, code: 'SERVER', error: 'Server error' });
   }
 });
+
+
+
+
+
 
 
 
