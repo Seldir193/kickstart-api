@@ -26,12 +26,7 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
   }
 
   // 2) passende Booking-Ref im Customer
-
-
-
-
-
-    let ref = customer.bookings.find(
+  let ref = customer.bookings.find(
     (b) => String(b.bookingId) === String(booking._id)
   );
 
@@ -64,25 +59,20 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
     ref = customer.bookings[customer.bookings.length - 1];
   }
 
-
-
-
-
-
-
-  // 3) Preis bestimmen (Einmalpreis = aktueller Offer-Preis, Fallback: booking.priceAtBooking)
+  // 3) Preis bestimmen
+  //    🔴 BUG vorher: immer offer.price, Rabatt ging verloren
+  //    ✅ Jetzt: zuerst booking.priceAtBooking (inkl. Rabatte), dann Fallback offer.price
   const amount =
-    typeof offer?.price === 'number'
-      ? offer.price
-      : typeof booking.priceAtBooking === 'number'
+    typeof booking.priceAtBooking === 'number'
       ? booking.priceAtBooking
-      : null;
+      : typeof offer?.price === 'number'
+        ? offer.price
+        : null;
 
   // 4) Rechnungsnummer erzeugen (PW-25-0029 / CA-25-0016)
   const now       = new Date();
   const yearShort = String(now.getFullYear()).slice(-2); // "25" für 2025
 
-  // Erkennen, ob Powertraining oder Camp anhand von Offer/Booking-Text
   const textForType = [
     offer?.title,
     offer?.sub_type,
@@ -104,19 +94,16 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
     textForType.includes('feriencamp') ||
     textForType.includes('holiday camp');
 
-  // Prefix wie intern:
+  // Prefix:
   //  - Powertraining → PW
   //  - Camp (Default) → CA
   let prefix = 'CA';
   if (isPowertraining) prefix = 'PW';
   else if (isCamp)     prefix = 'CA';
 
-  let rawNo =
-    booking.invoiceNumber ||
-    booking.invoiceNo;
+  let rawNo = booking.invoiceNumber || booking.invoiceNo;
 
   if (!rawNo) {
-    // Letzte vorhandene Rechnungsnummer für diesen Owner + Prefix + Jahr finden
     const prefixPattern = `${prefix}-${yearShort}-`; // z.B. "PW-25-"
 
     const last = await Booking.findOne({
@@ -146,26 +133,29 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
   const invoiceNo   = normalizeInvoiceNo(rawNo);
   const invoiceDate = booking.invoiceDate || now;
 
-
-
   // 5) Booking-Snapshot aktualisieren
-  booking.invoiceNumber  = invoiceNo;
-  booking.invoiceNo      = invoiceNo;
-  booking.invoiceDate    = invoiceDate;
-  booking.priceAtBooking = amount != null ? amount : booking.priceAtBooking;
-  booking.currency       = booking.currency || 'EUR';
-  booking.offerTitle     =
+  booking.invoiceNumber = invoiceNo;
+  booking.invoiceNo     = invoiceNo;
+  booking.invoiceDate   = invoiceDate;
+
+  // ⛔ Nicht mehr den rabattierten Preis überschreiben!
+  if (typeof booking.priceAtBooking !== 'number' && amount != null) {
+    booking.priceAtBooking = amount;
+  }
+
+  booking.currency   = booking.currency || 'EUR';
+  booking.offerTitle =
     booking.offerTitle ||
     offer?.title ||
     offer?.sub_type ||
     offer?.type ||
     '';
-  booking.offerType      =
+  booking.offerType  =
     booking.offerType ||
     offer?.sub_type ||
     offer?.type ||
     '';
-  booking.venue          =
+  booking.venue      =
     booking.venue ||
     offer?.location ||
     '';
@@ -197,7 +187,6 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
       booking.venue ||
       '';
 
-    // optionale Referenzliste der Rechnungen am BookingRef
     if (!Array.isArray(ref.invoiceRefs)) ref.invoiceRefs = [];
     const hasRef = ref.invoiceRefs.some((r) => r.number === invoiceNo);
     if (!hasRef) {
@@ -236,7 +225,7 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
       customer,
       booking,
       offer,
-      pdfBuffer, // sendParticipationEmail kümmert sich um den Rest
+      pdfBuffer,
     });
   } catch (e) {
     console.error('[holidayInvoice] sendParticipationEmail failed:', e?.message || e);
@@ -246,6 +235,12 @@ async function createHolidayInvoiceForBooking({ ownerId, offer, booking }) {
 module.exports = {
   createHolidayInvoiceForBooking,
 };
+
+
+
+
+
+
 
 
 
