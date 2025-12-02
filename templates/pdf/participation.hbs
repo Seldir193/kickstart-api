@@ -66,7 +66,7 @@
     {{#if flags.isWeekly}}
       <!-- WEEKLY: Zeile 1: erster Monat -->
       <tr>
-        <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt)</td>
+        <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt).</td>
         <td class="amt">
           {{#if invoice.firstMonth}}
             {{fmtMoney invoice.firstMonth invoice.currency}}
@@ -84,29 +84,105 @@
 
       <!-- WEEKLY: Zeile 2: Monatsgebühr -->
       <tr>
-        <td class="desc"><strong>Die monatliche Teilnahmegebühr beträgt</strong></td>
+        <td class="desc"><strong>Die regelmäßige monatliche Teilnahmegebühr beträgt</strong></td>
         <td class="amt">
           {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
           {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
           {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
         </td>
       </tr>
+
     {{else}}
-      <!-- NON-WEEKLY (Holiday/Personal/Club): eine einzige Zeile -->
-      <tr>
-        <td class="desc"><strong>Die Teilnahmegebühr beträgt</strong></td>
-        <td class="amt">
-          {{#if invoice.single}}
-            {{fmtMoney invoice.single invoice.currency}}
-          {{else if pricing.single}}
-            {{fmtMoney pricing.single pricing.currency}}
-          {{else if invoice.monthly}}
-            {{fmtMoney invoice.monthly invoice.currency}}
-          {{else if pricing.monthly}}
-            {{fmtMoney pricing.monthly pricing.currency}}
-          {{/if}}
-        </td>
-      </tr>
+      {{!-- NON-WEEKLY (Holiday / Personal / Club) --}}
+      {{#if booking.discount}}
+
+        {{!-- Optionaler Einleitungssatz zum Rabattblock --}}
+        <tr>
+          <td class="desc muted small">
+            Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
+          </td>
+          <td class="amt"></td>
+        </tr>
+
+        {{!-- Regulärer Preis --}}
+        <tr>
+          <td class="desc">Reguläre Teilnahmegebühr (ohne Rabatte)</td>
+          <td class="amt">
+            {{#if booking.discount.basePrice}}
+              {{fmtMoney booking.discount.basePrice invoice.currency}}
+            {{else if invoice.single}}
+              {{fmtMoney invoice.single invoice.currency}}
+            {{else if pricing.single}}
+              {{fmtMoney pricing.single pricing.currency}}
+            {{else if invoice.monthly}}
+              {{fmtMoney invoice.monthly invoice.currency}}
+            {{else if pricing.monthly}}
+              {{fmtMoney pricing.monthly pricing.currency}}
+            {{/if}}
+          </td>
+        </tr>
+
+        {{!-- Geschwisterrabatt (falls > 0) --}}
+        {{#if booking.discount.siblingDiscount}}
+          <tr>
+            <td class="desc">Geschwisterrabatt</td>
+            <td class="amt">− {{fmtMoney booking.discount.siblingDiscount invoice.currency}}</td>
+          </tr>
+        {{/if}}
+
+        {{!-- Mitgliederrabatt (falls > 0) --}}
+        {{#if booking.discount.memberDiscount}}
+          <tr>
+            <td class="desc">Mitgliederrabatt (Teilnahme am laufenden Kurs)</td>
+            <td class="amt">− {{fmtMoney booking.discount.memberDiscount invoice.currency}}</td>
+          </tr>
+        {{/if}}
+
+        {{!-- Gesamtrabatt, nur wenn gesetzt --}}
+        {{#if booking.discount.totalDiscount}}
+          <tr>
+            <td class="desc"><strong>Summe aller Rabatte</strong></td>
+            <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
+          </tr>
+        {{/if}}
+
+        {{!-- Endpreis nach Rabatt --}}
+        <tr>
+          <td class="desc"><strong>Endgültige Teilnahmegebühr nach Rabatt</strong></td>
+          <td class="amt">
+            {{#if booking.discount.finalPrice}}
+              {{fmtMoney booking.discount.finalPrice invoice.currency}}
+            {{else}}
+              {{#if invoice.single}}
+                {{fmtMoney invoice.single invoice.currency}}
+              {{else if pricing.single}}
+                {{fmtMoney pricing.single pricing.currency}}
+              {{else if invoice.monthly}}
+                {{fmtMoney invoice.monthly invoice.currency}}
+              {{else if pricing.monthly}}
+                {{fmtMoney pricing.monthly pricing.currency}}
+              {{/if}}
+            {{/if}}
+          </td>
+        </tr>
+
+      {{else}}
+        <!-- NON-WEEKLY ohne Rabatt: eine einzige Zeile (altes Verhalten) -->
+        <tr>
+          <td class="desc"><strong>Die Teilnahmegebühr beträgt</strong></td>
+          <td class="amt">
+            {{#if invoice.single}}
+              {{fmtMoney invoice.single invoice.currency}}
+            {{else if pricing.single}}
+              {{fmtMoney pricing.single pricing.currency}}
+            {{else if invoice.monthly}}
+              {{fmtMoney invoice.monthly invoice.currency}}
+            {{else if pricing.monthly}}
+              {{fmtMoney pricing.monthly pricing.currency}}
+            {{/if}}
+          </td>
+        </tr>
+      {{/if}}
     {{/if}}
   </table>
 
@@ -121,14 +197,19 @@
         {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
         {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
       {{else}}
-        {{#if invoice.single}}
-          {{fmtMoney invoice.single invoice.currency}}
-        {{else if pricing.single}}
-          {{fmtMoney pricing.single pricing.currency}}
-        {{else if invoice.monthly}}
-          {{fmtMoney invoice.monthly invoice.currency}}
-        {{else if pricing.monthly}}
-          {{fmtMoney pricing.monthly pricing.currency}}
+        {{!-- Für Holiday/Camp: wenn Rabatt vorhanden, Endpreis anzeigen --}}
+        {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+        {{else}}
+          {{#if invoice.single}}
+            {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+            {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+            {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+            {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
         {{/if}}
       {{/if}}
     </span>
@@ -191,14 +272,3 @@
 </main>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
