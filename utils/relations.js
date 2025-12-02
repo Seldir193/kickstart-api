@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 const { Types } = mongoose;
 
 const Customer = require('../models/Customer');
+const Booking  = require('../models/Booking');
+const Offer    = require('../models/Offer');
 
 /* ===================== Helpers ===================== */
 
@@ -88,15 +90,6 @@ function getPrimaryChildFromCustomer(customer) {
  *  - ownerId
  *  - childFirstName / childLastName
  *  - optional childBirthDate
- *
- * Ursprüngliche Idee:
- *  - Kinder über alle Customers finden und einen "Basis-Kunden"
- *    bestimmen, falls mehrere Treffer existieren.
- *
- * Für unser neues Konzept:
- *  - Für Online-Buchungen NICHT mehr zum Matchen benutzen,
- *    dort entscheidet die E-Mail des Elternteils.
- *  - Kann aber weiterhin für interne Tools/Reports genutzt werden.
  */
 async function findBaseCustomerForChild({
   ownerId,
@@ -171,12 +164,6 @@ async function findBaseCustomerForChild({
 /**
  * Legt einen neuen Customer für einen "alternativen" Elternteil an
  * und verknüpft ihn über relatedCustomerIds mit dem bestehenden baseCustomer.
- *
- * Wichtig:
- * - Neuer Elternteil = neues Elternkonto (eigene E-Mail)
- * - Kind wird als eigenes Child-Objekt kopiert (Name/Geburtsdatum/etc.)
- * - Das passt zu deinem Konzept:
- *   "anderer Elternteil bucht → neuer Kunde + eigenes Kind"
  */
 async function createCustomerForNewParent({
   ownerId,
@@ -219,7 +206,7 @@ async function createCustomerForNewParent({
   await Customer.syncCounterWithExisting(owner);
   const nextUserId = await Customer.nextUserIdForOwner(owner);
 
-  // neuen Customer anlegen (eigener Eltern-Account + eigenes Kind-Objekt)
+  // neuen Customer anlegen
   const newCustomer = await Customer.create({
     owner,
     userId: nextUserId,
@@ -242,7 +229,6 @@ async function createCustomerForNewParent({
     notes: '',
     bookings: [],
 
-    // Optionale „Familien-Verknüpfung“ auf DB-Ebene
     relatedCustomerIds: [baseCustomer._id],
   });
 
@@ -263,6 +249,99 @@ async function createCustomerForNewParent({
   return newCustomer;
 }
 
+/* ======================================================= */
+/*  Prüft, ob ein Kind einen aktiven Weekly-Kurs hat       */
+/* ======================================================= */
+
+async function childHasActiveWeeklyBooking({
+  ownerId,
+  firstName,
+  lastName,
+  birthDate,
+}) {
+  const owner =
+    ownerId instanceof Types.ObjectId
+      ? ownerId
+      : (Types.ObjectId.isValid(ownerId) ? new Types.ObjectId(ownerId) : null);
+
+  if (!owner) return false;
+
+  const first = normalizeString(firstName);
+  const last  = normalizeString(lastName);
+  if (!first || !last) return false;
+
+  // 1) Basis-Kunde über Kind (Name + optional Geburtsdatum) finden
+  const baseCustomer = await findBaseCustomerForChild({
+    ownerId: owner,
+    childFirstName: first,
+    childLastName:  last,
+    childBirthDate: birthDate || null,
+  });
+
+  if (!baseCustomer) {
+    // Kein bekannter Kunde mit diesem Kind → kein Weekly
+    return false;
+  }
+
+  // 2) Familie: Base + relatedCustomerIds
+  const familyIds = [
+    baseCustomer._id,
+    ...(Array.isArray(baseCustomer.relatedCustomerIds)
+      ? baseCustomer.relatedCustomerIds
+      : []),
+  ];
+
+  const familyCustomers = await Customer.find({
+    _id: { $in: familyIds },
+    owner,
+  }).lean();
+
+  // 3) Booking-IDs aus den Customers einsammeln
+  const bookingIds = [];
+  for (const c of familyCustomers) {
+    if (Array.isArray(c.bookings)) {
+      for (const b of c.bookings) {
+        if (b && b.bookingId) {
+          bookingIds.push(b.bookingId);
+        }
+      }
+    }
+  }
+
+  if (!bookingIds.length) return false;
+
+  // 4) Echte Bookings + Offer laden
+  const bookings = await Booking.find({
+    _id:   { $in: bookingIds },
+    owner: owner,
+    status: { $in: ['pending', 'processing', 'confirmed'] },
+  })
+    .populate('offerId', 'category type sub_type')
+    .lean();
+
+  if (!bookings.length) return false;
+
+  // 5) Helper für Weekly-Erkennung
+  function isWeeklyOffer(offer) {
+    if (!offer) return false;
+    const cat  = String(offer.category || '');
+    const type = String(offer.type || '');
+    const sub  = String(offer.sub_type || '').toLowerCase();
+
+    if (cat === 'Weekly') return true;
+    if (type === 'Foerdertraining' || type === 'Kindergarten') return true;
+
+    // explizite Non-Weekly
+    if (cat === 'Holiday') return false;
+    if (sub.includes('powertraining')) return false;
+
+    return false;
+  }
+
+  // 6) Mindestens eine Weekly-Buchung in der Familie?
+  return bookings.some(b => isWeeklyOffer(b.offerId));
+}
+
 module.exports = {
   normalizeString,
   normalizeEmail,
@@ -270,11 +349,8 @@ module.exports = {
   hasSameChild,
   findBaseCustomerForChild,
   createCustomerForNewParent,
+  childHasActiveWeeklyBooking,   // ⬅️ wichtig: exportieren
 };
-
-
-
-
 
 
 
