@@ -92,7 +92,11 @@ function shapeCustomer(customer = {}, booking = {}) {
   };
 }
 
-/** Booking → Template-Shape (inkl. optionaler Accounting-/Referenzfelder) */
+
+
+
+
+
 function shapeBooking(booking = {}, offer = {}) {
   // Preise aus Booking-Ref übernehmen, falls vorhanden
   const monthlyAmount =
@@ -110,22 +114,17 @@ function shapeBooking(booking = {}, offer = {}) {
         : undefined;
 
   // Rechnungsnummern/Referenzen robust mit Fallbacks
-  const invoiceNoRaw       = booking.invoiceNo || booking.invoiceNumber || '';
-  const invoiceDateISO     = toISODate(booking.invoiceDate || '');
+  const invoiceNoRaw    = booking.invoiceNo || booking.invoiceNumber || '';
+  const invoiceDateISO  = toISODate(booking.invoiceDate || '');
 
-  // Referenzen für Kündigung/Storno: wenn explizit nicht gesetzt,
-  // fallback auf vorhandene Rechnungsinfos am Booking
-  const refInvoiceNoRaw      = booking.refInvoiceNo || invoiceNoRaw || '';
-  const refInvoiceDateISO    = toISODate(booking.refInvoiceDate || invoiceDateISO || '');
+  const refInvoiceNoRaw   = booking.refInvoiceNo || invoiceNoRaw || '';
+  const refInvoiceDateISO = toISODate(booking.refInvoiceDate || invoiceDateISO || '');
 
   return {
     _id       : booking._id || '',
 
     // Angebot: primär Offer, sekundär Snapshot im Booking
-   // offerTitle: (offer.title    || booking.offerTitle || ''),
     offerTitle: (offer.title || offer.sub_type || booking.offerTitle || booking.offerType || ''),
-
-    //offerType : (offer.type     || booking.offerType  || ''),
     offerType : (offer.sub_type || booking.offerType  || offer.type || ''),
     venue     : (offer.location || booking.venue      || booking.offerLocation || ''),
 
@@ -144,17 +143,30 @@ function shapeBooking(booking = {}, offer = {}) {
     monthlyAmount,
     firstMonthAmount,
 
-    // NORMALISIERT ausgeben
-    invoiceNo:        normalizeInvoiceNo(invoiceNoRaw),
-    invoiceDate:      invoiceDateISO,
+    // 🔹 WICHTIG: rabattierter Preis UND Währung mitgeben
+    priceAtBooking: booking.priceAtBooking,
+    currency      : booking.currency || 'EUR',
 
-    cancellationNo:   booking.cancellationNo || '',
-    refInvoiceNo:     normalizeInvoiceNo(refInvoiceNoRaw),
-    refInvoiceDate:   refInvoiceDateISO,
+    // NORMALISIERT ausgeben
+    invoiceNo:      normalizeInvoiceNo(invoiceNoRaw),
+    invoiceDate:    invoiceDateISO,
+
+    cancellationNo: booking.cancellationNo || '',
+    refInvoiceNo:   normalizeInvoiceNo(refInvoiceNoRaw),
+    refInvoiceDate: refInvoiceDateISO,
 
     stornoNo: booking.stornoNo || '',
   };
 }
+
+
+
+
+
+
+
+
+
 
 /** Storno */
 function shapeStornoData({ customer, booking, offer, amount, currency = 'EUR' }) {
@@ -249,11 +261,31 @@ function shapeCancellationData({ customer, booking, offer, date, endDate, reason
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function shapeParticipationData({ customer, booking, offer }) {
   const shapedCustomer = shapeCustomer(customer, booking);
   const shapedBooking  = shapeBooking(booking, offer);
 
-  // 1) Kursname: nimm booking.offer, aber säubere ihn von Adressanteilen
+  // 1) Kursname säubern (ohne Adresse)
   const cleanOffer =
     sanitizeCourseTitle(
       booking?.offer ||
@@ -263,27 +295,72 @@ function shapeParticipationData({ customer, booking, offer }) {
       ''
     );
 
-  // 2) Kurstag/Zeit aus deinen vorhandenen Feldern übernehmen (fallbacks optional)
-  const dayTimes     = booking?.dayTimes || booking?.kurstag || booking?.weekday || '';
-  //const timeDisplay  = booking?.timeDisplay || booking?.kurszeit || booking?.uhrzeit || ''; 
+  // 2) Kurstag/Zeit-Felder
+  const dayTimes =
+    booking?.dayTimes ||
+    booking?.kurstag ||
+    booking?.weekday ||
+    '';
 
-  // in shapeParticipationData(...)
-const timeDisplay =
-  booking?.timeDisplay ||
-  booking?.kurszeit ||
-  booking?.time ||      // ← dies noch ergänzen
-  booking?.uhrzeit ||
-  '';
+  const timeDisplay =
+    booking?.timeDisplay ||
+    booking?.kurszeit ||
+    booking?.time ||
+    booking?.uhrzeit ||
+    '';
 
+  // 3) Rabatt-Infos aus booking.meta (für Camp/Powertraining)
+  const meta = booking && booking.meta ? booking.meta : {};
+
+  const siblingDiscount =
+    meta && meta.siblingDiscount != null
+      ? Number(meta.siblingDiscount) || 0
+      : 0;
+
+  const memberDiscount =
+    meta && meta.memberDiscount != null
+      ? Number(meta.memberDiscount) || 0
+      : 0;
+
+  const metaTotal =
+    meta && meta.totalDiscount != null
+      ? Number(meta.totalDiscount) || 0
+      : 0;
+
+  const totalDiscount =
+    metaTotal || siblingDiscount + memberDiscount;
+
+  const basePrice =
+    typeof meta.basePrice === 'number'
+      ? meta.basePrice
+      : typeof offer?.price === 'number'
+        ? offer.price
+        : null;
+
+  const finalPrice =
+    typeof booking.priceAtBooking === 'number'
+      ? booking.priceAtBooking
+      : (basePrice != null
+          ? Math.max(0, basePrice - totalDiscount)
+          : null);
+
+  const discount = {
+    basePrice: basePrice,
+    siblingDiscount,
+    memberDiscount,
+    totalDiscount,
+    finalPrice,
+  };
 
   return {
     customer: shapedCustomer,
     booking : {
       ...shapedBooking,
-      // wichtig: diese 3 Felder fürs Template bereitstellen
-      offer: cleanOffer,          // ← nur Kursname, ohne Adresse
-      dayTimes,                   // ← "Sonntag"
-      timeDisplay,                // ← "15:00 bis 16:00"
+      // wichtig für Template:
+      offer: cleanOffer,
+      dayTimes,
+      timeDisplay,
+      discount,
     },
   };
 }
