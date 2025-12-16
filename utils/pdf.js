@@ -79,25 +79,10 @@ function computeIsWeekly(offer) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 async function buildParticipationPdf({
+  
+
+
   customer,
   booking,
   offer,
@@ -254,6 +239,21 @@ async function buildParticipationPdf({
   shaped.booking.isWeekly = isWeekly;
   shaped.isWeekly = isWeekly;
 
+
+
+    // Flag ins Booking UND Top-Level
+  shaped.booking.isWeekly = isWeekly;
+  shaped.isWeekly = isWeekly;
+
+  // 🔍 DEBUG: Was geht wirklich ins HTML rein?
+  console.log('[PDF DEBUG] isWeekly:', isWeekly);
+  console.log('[PDF DEBUG] booking.id:', shaped.booking._id || booking?._id);
+  console.log('[PDF DEBUG] booking.meta:', booking && booking.meta);
+  console.log('[PDF DEBUG] booking.priceAtBooking:', booking && booking.priceAtBooking);
+  console.log('[PDF DEBUG] shaped.booking.discount:', shaped.booking.discount);
+  console.log('[PDF DEBUG] shaped.invoice:', shaped.invoice);
+  console.log('[PDF DEBUG] shaped.pricing:', shaped.pricing);
+
   // ------------------------------------------------------------------
   // → Renderer
   // ------------------------------------------------------------------
@@ -273,7 +273,6 @@ async function buildParticipationPdf({
     invoice: shaped.invoice,
   });
 }
-
 
 
 
