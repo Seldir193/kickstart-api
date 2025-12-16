@@ -272,7 +272,8 @@ async function bookingPdfBufferHTML(booking) {
 
 
 
-// ⬇️ ERSETZE die komplette Funktion buildParticipationPdfHTML durch diese Version
+
+// ⬇️ KOMPLETT ersetzen
 async function buildParticipationPdfHTML({
   customer,
   booking,
@@ -282,30 +283,43 @@ async function buildParticipationPdfHTML({
   monthlyAmount,
   firstMonthAmount,
   venue,
+  isWeekly,       // kommt optional aus utils/pdf.js
+  pricing,        // kommt aus utils/pdf.js (shaped.pricing)
+  invoice,        // kommt aus utils/pdf.js (shaped.invoice)
 }) {
   const brand = getBrand();
 
   // parent/child ohne E-Mail im PDF
   const parent = { ...(customer?.parent || {}) };
-  if (Object.prototype.hasOwnProperty.call(parent, 'email')) delete parent.email;
-  const child  = { ...(customer?.child  || {}) };
+  if (Object.prototype.hasOwnProperty.call(parent, 'email')) {
+    delete parent.email;
+  }
+  const child = { ...(customer?.child || {}) };
 
-  const finalVenue = venue || booking?.venue || offer?.location || '';
+  const weekly =
+    typeof isWeekly === 'boolean' ? isWeekly : isWeeklyOffer(offer);
+
+  const finalVenue =
+    venue || booking?.venue || offer?.location || '';
+
   const title =
     booking?.offerTitle ||
-    booking?.offerType  ||
-    booking?.offer      ||
-    offer?.sub_type     ||
-    offer?.title        ||
+    booking?.offerType ||
+    booking?.offer ||
+    offer?.sub_type ||
+    offer?.title ||
     '-';
 
   /* ---------- Wochentag/Zeit-Helfer ---------- */
   function weekdayFromISO(iso) {
     if (!iso) return '';
-    const d = new Date(/\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso}T00:00:00` : iso);
+    const d = new Date(
+      /\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso}T00:00:00` : iso
+    );
     if (Number.isNaN(d.getTime())) return '';
     return new Intl.DateTimeFormat('de-DE', { weekday: 'long' }).format(d);
   }
+
   function timeRangeFromOffer(off, weekdayName = '') {
     if (!off) return '';
     const join = (f, t) =>
@@ -314,6 +328,7 @@ async function buildParticipationPdfHTML({
         .map(String)
         .map((s) => s.trim())
         .join(' – ');
+
     const norm = (v) => String(v || '').toLowerCase();
     const w = norm(weekdayName);
 
@@ -342,6 +357,7 @@ async function buildParticipationPdfHTML({
         if (t) return String(t).replace(/\s*-\s*/g, ' – ').trim();
       }
     }
+
     const from = off.timeFrom ?? off.from ?? off.start;
     const to   = off.timeTo   ?? off.to   ?? off.end;
     if (from || to) return join(from, to);
@@ -349,156 +365,168 @@ async function buildParticipationPdfHTML({
     return t ? String(t).replace(/\s*-\s*/g, ' – ').trim() : '';
   }
 
-  const isWeekly = isWeeklyOffer(offer);
+  // Wochentag/Zeit nur für Weeklies relevant
+  const bookingDate = booking?.date || booking?.createdAt || null;
 
-  const derivedDay  = isWeekly
-    ? (booking?.kurstag || booking?.weekday || weekdayFromISO(booking?.date))
+  const derivedDay = weekly
+    ? (
+        booking?.dayTimes ||
+        booking?.kurstag ||
+        booking?.weekday ||
+        weekdayFromISO(bookingDate)
+      )
     : '';
-  const derivedTime = isWeekly
-    ? (booking?.kurszeit || booking?.time || booking?.uhrzeit || timeRangeFromOffer(offer, derivedDay))
+
+  const derivedTime = weekly
+    ? (
+        booking?.timeDisplay ||
+        booking?.kurszeit ||
+        booking?.time ||
+        booking?.uhrzeit ||
+        timeRangeFromOffer(offer, derivedDay)
+      )
     : '';
 
-  const dayTimes    = isWeekly ? (booking?.dayTimes    || derivedDay  || '') : '';
-  const timeDisplay = isWeekly ? (booking?.timeDisplay || derivedTime || '') : '';
+  const dayTimes    = weekly ? derivedDay  : '';
+  const timeDisplay = weekly ? derivedTime : '';
 
-  // --- PREISE ---
-  const currency = 'EUR';
+  /* ---------- Pricing / Invoice aus utils/pdf.js übernehmen ---------- */
 
-  // Monats-/Pro-Rata-Preise nur für Weeklies
-  const monthlyPrice =
-    isWeekly
-      ? (
-          typeof monthlyAmount === 'number'          ? monthlyAmount
-        : typeof booking?.monthlyAmount === 'number' ? booking.monthlyAmount
-        : typeof offer?.price === 'number'           ? offer.price
-        : undefined
-        )
-      : undefined;
+  const effInvoice = { ...(invoice || {}) };
+  const effPricing = { ...(pricing || {}) };
 
-  function prorateForStart(dateISO, monthly) {
-    const d = new Date((dateISO || '') + 'T00:00:00');
-    if (!monthly || Number.isNaN(d.getTime())) return undefined;
-    const daysInMonth   = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    const startDay      = d.getDate();
-    const daysRemaining = daysInMonth - startDay + 1;
-    const factor        = Math.max(0, Math.min(1, daysRemaining / daysInMonth));
-    return Math.round(monthly * factor * 100) / 100;
+  // optional übergebene Werte nur als Fallback benutzen
+  if (invoiceNo && !effInvoice.number) {
+    effInvoice.number = invoiceNo;
+  }
+  if (invoiceDate && !effInvoice.date) {
+    effInvoice.date = invoiceDate;
   }
 
-  const firstMonth =
-    isWeekly
-      ? (
-          typeof firstMonthAmount === 'number'          ? firstMonthAmount
-        : typeof booking?.firstMonthAmount === 'number' ? booking.firstMonthAmount
-        : (booking?.date && typeof monthlyPrice === 'number')
-          ? prorateForStart(booking.date, monthlyPrice)
-        : undefined
-        )
-      : undefined;
+  // Monatsbeträge nur für Weeklies
+  if (weekly && typeof monthlyAmount === 'number') {
+    effInvoice.monthly = monthlyAmount;
+    effPricing.monthly = monthlyAmount;
+  }
+  if (weekly && typeof firstMonthAmount === 'number') {
+    effInvoice.firstMonth = firstMonthAmount;
+    effPricing.firstMonth = firstMonthAmount;
+  }
 
-  // Einmalpreis für Non-Weekly (ohne Rabatte – reine Basis)
-  const baseSingle =
-    !isWeekly
-      ? (
-          typeof booking?.priceAtBooking === 'number' ? booking.priceAtBooking
-        : typeof offer?.price === 'number'            ? offer.price
-        : undefined
-        )
-      : undefined;
+  // Währung
+  let currency =
+    effInvoice.currency ||
+    effPricing.currency ||
+    'EUR';
+  effInvoice.currency = currency;
+  effPricing.currency = currency;
 
-  // --- RECHNUNG ---
-  const invoiceNumber  = invoiceNo || booking?.invoiceNo || booking?.invoiceNumber || '';
-  const invoiceDateRaw = invoiceDate || booking?.invoiceDate || '';
-  const taxNote        = 'Umsatzsteuerbefreit nach § 19 UStG';
+  /* ---------- Rabatt-Infos für Camps/Holiday/Non-Weekly ---------- */
 
-  /* ---------- NEU: Rabatt-Infos für Camps/Holiday/Non-Weekly ---------- */
   let discount = null;
-  if (!isWeekly && booking) {
-    const meta = booking.meta || {};
 
-    const basePrice =
-      typeof meta.basePrice === 'number'
-        ? meta.basePrice
-        : (typeof offer?.price === 'number' ? offer.price : baseSingle);
+  if (!weekly && booking) {
+    // 1️⃣ Wenn utils/pdf.js schon booking.discount gebaut hat → bevorzugen
+    if (booking.discount) {
+      discount = { ...booking.discount };
+    } else {
+      // 2️⃣ Fallback: aus booking.meta + offer.price berechnen
+      const meta = booking.meta || {};
 
-    const siblingDiscount = Number(meta.siblingDiscount || 0);
-    const memberDiscount  = Number(meta.memberDiscount  || 0);
+      const basePrice =
+        typeof meta.basePrice === 'number'
+          ? meta.basePrice
+          : (typeof offer?.price === 'number'
+              ? offer.price
+              : undefined);
 
-    const totalDiscount =
-      meta.totalDiscount != null
-        ? Number(meta.totalDiscount)
-        : siblingDiscount + memberDiscount;
+      const siblingDiscount = Number(meta.siblingDiscount || 0);
+      const memberDiscount  = Number(meta.memberDiscount  || 0);
 
-    const finalPrice =
-      typeof booking.priceAtBooking === 'number'
-        ? Number(booking.priceAtBooking)
-        : (typeof basePrice === 'number'
-            ? Math.max(0, basePrice - totalDiscount)
-            : undefined);
+      const totalDiscount =
+        meta.totalDiscount != null
+          ? Number(meta.totalDiscount)
+          : siblingDiscount + memberDiscount;
 
-    discount = {
-      basePrice,
-      siblingDiscount,
-      memberDiscount,
-      totalDiscount,
-      finalPrice,
-    };
+      const finalPrice =
+        typeof booking.priceAtBooking === 'number'
+          ? Number(booking.priceAtBooking)
+          : (typeof basePrice === 'number'
+              ? Math.max(0, basePrice - totalDiscount)
+              : undefined);
+
+      discount = {
+        basePrice,
+        siblingDiscount,
+        memberDiscount,
+        totalDiscount,
+        finalPrice,
+      };
+    }
   }
 
   // Effektiver Einmalpreis fürs Template (Endpreis nach Rabatt, falls vorhanden)
-  const effectiveSingle =
-    !isWeekly
-      ? (
-          discount && discount.finalPrice != null && Number.isFinite(Number(discount.finalPrice))
-            ? Number(discount.finalPrice)
-            : baseSingle
-        )
-      : undefined;
+  let effectiveSingle;
+  if (!weekly) {
+    if (
+      discount &&
+      discount.finalPrice != null &&
+      Number.isFinite(Number(discount.finalPrice))
+    ) {
+      effectiveSingle = Number(discount.finalPrice);
+    } else if (
+      effInvoice.single != null &&
+      Number.isFinite(Number(effInvoice.single))
+    ) {
+      effectiveSingle = Number(effInvoice.single);
+    } else if (
+      effPricing.single != null &&
+      Number.isFinite(Number(effPricing.single))
+    ) {
+      effectiveSingle = Number(effPricing.single);
+    } else if (typeof offer?.price === 'number') {
+      effectiveSingle = offer.price;
+    }
 
-  // ---- Booking-Kontext bauen & Rabatt anhängen ----
+    if (effectiveSingle != null) {
+      effInvoice.single = effectiveSingle;
+      effPricing.single = effectiveSingle;
+
+      if (
+        discount &&
+        (discount.finalPrice == null ||
+          !Number.isFinite(Number(discount.finalPrice)))
+      ) {
+        discount.finalPrice = effectiveSingle;
+      }
+    }
+  }
+
+  /* ---------- Booking-Kontext fürs Template ---------- */
+
   const bookingCtx = {
     ...(booking || {}),
     offerTitle: title,
-    date:       booking?.date || '',
-    status:     booking?.status || 'active',
-    venue:      finalVenue,
-
-    // Kopfzeile im HBS nutzt genau diese:
-    offer:       booking?.offer || title,
-    dayTimes:    dayTimes,     // bei Non-Weekly leer
-    timeDisplay: timeDisplay,  // bei Non-Weekly leer
+    date: booking?.date || '',
+    status: booking?.status || 'active',
+    venue: finalVenue,
+    offer: booking?.offer || title,
+    dayTimes,
+    timeDisplay,
   };
 
   if (discount) {
     bookingCtx.discount = discount;
   }
 
-  // ---- Pricing/Invoice-Objekte für das Template ----
-  const pricing = {
-    currency,
-    monthly:   monthlyPrice,
-    firstMonth,
-    single:    effectiveSingle,
-    oneOff:    !isWeekly,
-  };
-
-  const invoice = {
-    number:   invoiceNumber,
-    date:     invoiceDateRaw,
-    currency,
-    taxNote,
-    monthly:  monthlyPrice,
-    firstMonth,
-    single:   effectiveSingle,
-    oneOff:   !isWeekly,
+  const flags = {
+    isWeekly: weekly,
+    isOneOff: !weekly,
   };
 
   const html = compileTemplate('participation', {
     brand,
-    flags: {
-      isWeekly,
-      isOneOff: !isWeekly,
-    },
+    flags,
     customer: {
       userId : customer?.userId ?? '-',
       parent,
@@ -506,12 +534,16 @@ async function buildParticipationPdfHTML({
       address: customer?.address || {},
     },
     booking: bookingCtx,
-    pricing,
-    invoice,
+    pricing: effPricing,
+    invoice: effInvoice,
   });
 
   return renderPdf(html);
 }
+
+
+
+
 
 
 
