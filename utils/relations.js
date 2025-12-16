@@ -278,6 +278,16 @@ async function childHasActiveWeeklyBooking({
     childBirthDate: birthDate || null,
   });
 
+
+   console.log('[relations] childHasActiveWeeklyBooking – baseCustomer', {
+    owner: String(owner),
+    firstName: first,
+    lastName: last,
+    birthDate,
+    baseCustomerId: baseCustomer ? String(baseCustomer._id) : null,
+  });
+
+
   if (!baseCustomer) {
     // Kein bekannter Kunde mit diesem Kind → kein Weekly
     return false;
@@ -318,6 +328,20 @@ async function childHasActiveWeeklyBooking({
   })
     .populate('offerId', 'category type sub_type')
     .lean();
+
+      console.log('[relations] childHasActiveWeeklyBooking – bookings', {
+    count: bookings.length,
+    bookingIds: bookingIds.map(id => String(id)),
+    offers: bookings.map(b => ({
+      bookingId: String(b._id),
+      offerId: b.offerId ? String(b.offerId._id || b.offerId) : null,
+      category: b.offerId?.category,
+      type:     b.offerId?.type,
+      sub_type: b.offerId?.sub_type,
+      status:   b.status,
+    })),
+  });
+
 
   if (!bookings.length) return false;
 
