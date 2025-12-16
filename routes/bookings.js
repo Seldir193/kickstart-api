@@ -18,7 +18,7 @@ const { createHolidayInvoiceForBooking } = require('../utils/holidayInvoices');
 
 
 const { formatStornoNo } = require('../utils/sequences');
-const { findBaseCustomerForChild, createCustomerForNewParent,   } = require('../utils/relations');
+const { findBaseCustomerForChild, createCustomerForNewParent, childHasActiveWeeklyBooking,  } = require('../utils/relations');
 
 
 //const { buildParticipationPdf } = require('../utils/pdf');
@@ -224,42 +224,6 @@ function isWeeklyOffer(offer) {
 
 
 
-async function childHasActiveWeeklyBooking({ ownerId, firstName, lastName, birthDate }) {
-  const first = String(firstName || '').trim();
-  const last  = String(lastName  || '').trim();
-  if (!first || !last) return false;
-
-  // 1) "Base-Customer" für dieses Kind finden (über Name + optional Geburtsdatum)
-  const baseCustomer = await findBaseCustomerForChild({
-    ownerId,
-    childFirstName: first,
-    childLastName : last,
-    childBirthDate: birthDate || null,
-  });
-
-  if (!baseCustomer || !Array.isArray(baseCustomer.bookings) || !baseCustomer.bookings.length) {
-    return false;
-  }
-
-  // 2) In den Customer-BookingRefs nach einem laufenden Weekly-Kurs suchen
-  const hasWeeklyRef = baseCustomer.bookings.some((ref) => {
-    const status = String(ref.status || '').toLowerCase(); // "active" / "confirmed"
-    const type   = String(ref.offerType || ref.program || '').trim();
-    const cat    = String(ref.category || '').trim();
-
-    const isWeeklyCategory = cat === 'Weekly';
-    const isWeeklyType =
-      type === 'Foerdertraining' ||
-      type === 'Kindergarten';
-
-    const isRunning =
-      status === 'active' || status === 'confirmed';
-
-    return isRunning && (isWeeklyCategory || isWeeklyType);
-  });
-
-  return hasWeeklyRef;
-}
 
 
 
@@ -993,6 +957,27 @@ const hasSibling = detectSiblingFlag(req.body);
       isCamp && basePrice != null
         ? Math.max(0, basePrice - totalDiscount)
         : basePrice;
+
+
+
+            // 🔍 DEBUG: Rabatt-Entscheidung für Camp/Holiday
+    console.log('[booking:create] Discount debug', {
+      offerId: String(offer._id),
+      isHoliday,
+      isCamp,
+      isPower,
+      firstName: first,
+      lastName: last,
+      birthDateRaw,
+      metaFromBody,
+      hasSibling,
+      siblingDiscount,
+      memberDiscount,
+      totalDiscount,
+      basePrice,
+      finalPrice,
+    });
+
 
     // --- DUPLICATE-Prüfung wie bisher (pro Offer + Name) --- //
     if (first && last) {
