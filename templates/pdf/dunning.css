@@ -1,0 +1,223 @@
+/* templates/pdf/dunning.css */
+
+.doc-dunning {
+  padding-bottom: 0;
+}
+
+.subject-dunning {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.facts-dunning-meta {
+  margin: 0 0 8px;
+}
+
+.facts-dunning-meta .k {
+  min-width: 110px;
+}
+
+.facts-dunning-meta .v {
+  flex: 1;
+}
+
+.mono {
+  font-family: "Courier New", Courier, monospace;
+}
+
+.intro-dunning {
+  margin-top: 4mm;
+  margin-bottom: 4mm;
+}
+
+.notes-dunning-letter {
+  margin-top: 2mm;
+  margin-bottom: 4mm;
+}
+
+.notes-dunning-letter p {
+  margin: 0 0 5px;
+  line-height: 1.4;
+}
+
+.notes-dunning-letter p:last-child {
+  margin-bottom: 0;
+}
+
+.dunning-items {
+  margin-top: 4px;
+}
+
+.dunning-items td {
+  padding: 4px 0;
+  border: 0;
+}
+
+.dunning-items .desc {
+  width: 72%;
+}
+
+.dunning-items .amt {
+  width: 28%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dunning-items-head td {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dunning-items tr + tr td {
+  border-top: 1px solid #f3f4f6;
+}
+
+.dunning-items tr:first-child td,
+.dunning-items .dunning-items-head + tr td {
+  border-top: 0;
+}
+
+.dunning-total-line {
+  margin-top: 8px;
+}
+
+.notes-dunning-deadline {
+  margin-top: 2mm;
+  margin-bottom: 2mm;
+}
+
+.notes-dunning-deadline p {
+  margin: 0;
+}
+
+.payment-note-dunning {
+  margin-top: 4mm;
+  margin-bottom: 4mm;
+}
+
+.payment-note-dunning > div + div {
+  margin-top: 4mm;
+}
+
+.dunning-free-text {
+  white-space: pre-line;
+  padding-left: 0;
+}
+
+.dunning-signoff {
+  margin-top: 4mm;
+  margin-bottom: 0;
+}
+
+.dunning-signoff p {
+  margin: 0 0 3px;
+}
+
+.dunning-signoff p:last-child {
+  margin-bottom: 0;
+}
+
+.dunning-footer-spacer {
+  height: 22mm;
+}
+
+.doc-dunning .facts,
+.doc-dunning .items,
+.doc-dunning .notes,
+.doc-dunning .total-line {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.doc-dunning .section-title {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.doc-dunning .footer,
+.doc-dunning .footer-table {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Letzte Mahnung kompakter halten, damit kein Umbruch auf Seite 2 entsteht */
+.doc-dunning .subject-dunning,
+.doc-dunning .intro-dunning,
+.doc-dunning .notes-dunning-letter,
+.doc-dunning .facts-dunning-meta,
+.doc-dunning .notes-dunning-deadline,
+.doc-dunning .payment-note-dunning,
+.doc-dunning .dunning-signoff {
+  orphans: 2;
+  widows: 2;
+}
+
+.dunning-footer-spacer {
+  height: 20mm;
+}
+
+.dunning-footer-spacer-final {
+  height: 12mm;
+}
+
+.doc-dunning .subject-dunning {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.doc-dunning .facts-dunning-meta {
+  margin-bottom: 6px;
+}
+
+.doc-dunning .intro-dunning {
+  margin-top: 2mm;
+  margin-bottom: 2mm;
+}
+
+.doc-dunning .notes-dunning-letter {
+  margin-top: 1mm;
+  margin-bottom: 3mm;
+}
+
+.doc-dunning .notes-dunning-letter p {
+  margin: 0 0 3px;
+  line-height: 1.32;
+}
+
+.doc-dunning .sep-line {
+  margin: 8px 0 10px;
+}
+
+.doc-dunning .section-title {
+  margin: 8px 0 4px;
+}
+
+.doc-dunning .dunning-items td {
+  padding: 3px 0;
+}
+
+.doc-dunning .dunning-total-line {
+  margin-top: 6px;
+}
+
+.doc-dunning .notes-dunning-deadline {
+  margin-top: 1.5mm;
+  margin-bottom: 1.5mm;
+}
+
+.doc-dunning .payment-note-dunning {
+  margin-top: 2.5mm;
+  margin-bottom: 2.5mm;
+}
+
+.doc-dunning .payment-note-dunning > div + div {
+  margin-top: 2.5mm;
+}
+
+.doc-dunning .dunning-signoff {
+  margin-top: 2.5mm;
+}
+
+.doc-dunning .dunning-signoff p {
+  margin: 0 0 2px;
+}

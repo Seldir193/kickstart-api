@@ -1,0 +1,101 @@
+<mjml>
+  <mj-body background-color="#f5f7fb">
+    <mj-section padding="20px 0">
+      <mj-column width="100%">
+        <mj-image
+          padding="0 0 10px 0"
+          width="140px"
+          align="left"
+          src="{{brand.logoUrl}}"
+          alt="{{brand.company}}"
+        />
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="24px" border-radius="12px">
+      <mj-column width="100%">
+        <mj-text
+          font-size="18px"
+          font-weight="700"
+          color="#111827"
+          padding="0 0 12px 0"
+        >
+          {{ title }}
+        </mj-text>
+
+        <mj-text font-size="14px" color="#111827" padding="0 0 12px 0">
+          Hallo {{ greetingName }},
+        </mj-text>
+
+        <mj-text font-size="14px" color="#374151" padding="0 0 16px 0">
+          {{ intro }}
+        </mj-text>
+
+        <mj-divider border-color="#e5e7eb" />
+
+        <mj-text font-size="13px" color="#111827" padding="12px 0 0 0">
+          <strong>Programm:</strong> {{ booking.program }}
+        </mj-text>
+
+        <mj-text font-size="13px" color="#111827" padding="4px 0 0 0">
+          <strong>Startdatum:</strong> {{ booking.date }}
+        </mj-text>
+
+        <mj-text font-size="13px" color="#111827" padding="4px 0 0 0">
+          <strong>Referenz:</strong> {{ booking.code }}
+        </mj-text>
+
+        {{#if revocationUrl}}
+        <mj-text font-size="13px" color="#374151" padding="18px 0 8px 0">
+          Wenn du deinen Vertrag innerhalb von 14 Tagen widerrufen möchtest,
+          kannst du dafür den folgenden Link nutzen:
+        </mj-text>
+
+        <mj-button
+          background-color="#111827"
+          color="#ffffff"
+          font-size="14px"
+          font-weight="700"
+          border-radius="10px"
+          padding="0 0 10px 0"
+          href="{{revocationUrl}}"
+        >
+          Vertrag widerrufen
+        </mj-button>
+        {{/if}}
+
+        <mj-button
+          background-color="#111827"
+          color="#ffffff"
+          font-size="14px"
+          font-weight="700"
+          border-radius="10px"
+          padding="18px 0 10px 0"
+          href="{{actionUrl}}"
+        >
+          {{ ctaText }}
+        </mj-button>
+
+        <mj-text font-size="12px" color="#6b7280" padding="8px 0 0 0">
+          {{ note }}
+        </mj-text>
+
+        <mj-divider border-color="#e5e7eb" padding="18px 0" />
+
+        <mj-text font-size="13px" color="#111827" padding="0">
+          {{ signature.signoff }}<br />
+          {{ signature.name }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="14px 0">
+      <mj-column width="100%">
+        <mj-text font-size="11px" color="#6b7280" align="center">
+          {{ brand.company }} · {{ brand.addr1 }} · {{ brand.addr2 }} ·
+          {{ brand.email }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

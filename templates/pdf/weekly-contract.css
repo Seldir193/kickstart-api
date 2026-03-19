@@ -1,0 +1,449 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111827;
+}
+
+.page {
+  padding: 18mm 15mm;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  color: #0f1e2e;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.logo {
+  max-height: 52px;
+  max-width: 220px;
+  object-fit: contain;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 18px 0 10px;
+  color: #0f1e2e;
+}
+
+h2 {
+  font-size: 13px;
+  margin: 14px 0 8px;
+  color: #0f1e2e;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.box {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.k {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.v {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+  text-align: right;
+}
+
+.p {
+  font-size: 12px;
+  color: #111827;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* .sq {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #9ca3af;
+  border-radius: 2px;
+  margin-top: 2px;
+} */
+
+/* .sq.on {
+  background: #0f1e2e;
+  border-color: #0f1e2e;
+} */
+
+/* .sq {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #9ca3af;
+  border-radius: 3px;
+  margin-top: 2px;
+  background: #ffffff;
+  position: relative;
+  flex: 0 0 14px;
+}
+
+.sq.on {
+  border-color: #2563eb; /* premium blue */
+/* } */
+
+.sq.on::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid #2563eb;
+  border-bottom: 2px solid #2563eb;
+  transform: rotate(45deg);
+}
+*/ .sq {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #9ca3af;
+  border-radius: 3px;
+  margin-top: 2px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  color: transparent;
+}
+
+.sq.on {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.sig {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.line {
+  border-bottom: 1px solid #111827;
+  min-height: 18px;
+  padding-bottom: 2px;
+}
+
+.small {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.footer {
+  margin-top: 16px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.footer.tech {
+  margin-top: 10px;
+}
+
+.mono {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  word-break: break-word;
+}
+
+.contract-text {
+  page-break-inside: auto;
+  break-inside: auto;
+}
+
+.contract-text h2 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f1e2e;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.contract-text p,
+.contract-text li {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #111827;
+  orphans: 3;
+  widows: 3;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.contract-text ul {
+  margin: 6px 0 10px 16px;
+  padding: 0;
+  page-break-inside: auto;
+  break-inside: auto;
+}
+
+.contract-text li {
+  margin: 0 0 4px 0;
+}
+
+.legal,
+.tech {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.consentsBox {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.signatureBox {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@media print {
+  .consentsBox {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .signatureBox {
+    page-break-before: avoid;
+    break-before: avoid;
+  }
+}
+
+/* * {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111827;
+}
+
+.page {
+  padding: 18mm 15mm;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  color: #0f1e2e;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.logo {
+  max-height: 52px;
+  max-width: 220px;
+  object-fit: contain;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 18px 0 10px;
+  color: #0f1e2e;
+}
+
+h2 {
+  font-size: 13px;
+  margin: 14px 0 8px;
+  color: #0f1e2e;
+}
+
+.box {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.k {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.v {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+  text-align: right;
+}
+
+.p {
+  font-size: 12px;
+  color: #111827;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+}
+
+.sq {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #9ca3af;
+  border-radius: 2px;
+  margin-top: 2px;
+}
+
+.sq.on {
+  background: #0f1e2e;
+  border-color: #0f1e2e;
+}
+
+.sig {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.line {
+  border-bottom: 1px solid #111827;
+  min-height: 18px;
+  padding-bottom: 2px;
+}
+
+.small {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.footer {
+  margin-top: 16px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.footer.tech {
+  margin-top: 10px;
+}
+
+.mono {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  word-break: break-word;
+}
+
+.contract-text h2 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f1e2e;
+}
+
+.contract-text p,
+.contract-text li {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #111827;
+}
+
+.contract-text ul {
+  margin: 6px 0 10px 16px;
+  padding: 0;
+} */

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Vertrag</title>
+    <link rel="stylesheet" href="./weekly-contract.css" />
+</head>
+
+<body>
+    <div class="page">
+        <header class="top">
+            <div class="brandBlock">
+                <div class="brand">{{brand.company}}</div>
+                <div class="muted">{{brand.addr1}} · {{brand.addr2}}</div>
+                <div class="muted">{{brand.email}} · {{brand.website}}</div>
+            </div>
+
+            {{#if brand.logoUrl}}
+            <img class="logo" src="{{brand.logoUrl}}" alt="Logo" />
+            {{/if}}
+        </header>
+
+        <h1>Vertrag / Anmeldung (Digital)</h1>
+
+        <section class="box">
+            <div class="row">
+                <div class="k">Programm</div>
+                <div class="v">{{contract.program}}</div>
+            </div>
+            <div class="row">
+                <div class="k">Ort</div>
+                <div class="v">{{contract.venue}}</div>
+            </div>
+            <div class="row">
+                <div class="k">Start</div>
+                <div class="v">{{contract.schedule.startDate}}</div>
+            </div>
+            <div class="row">
+                <div class="k">Tag / Zeit</div>
+                <div class="v">
+                    {{contract.schedule.dayTimes}} · {{contract.schedule.timeDisplay}}
+                </div>
+            </div>
+        </section>
+
+        <h2>Angaben Kind</h2>
+        <section class="box grid">
+            <div class="row">
+                <div class="k">Vorname</div>
+                <div class="v">{{contract.child.firstName}}</div>
+            </div>
+            <div class="row">
+                <div class="k">Nachname</div>
+                <div class="v">{{contract.child.lastName}}</div>
+            </div>
+            <div class="row">
+                <div class="k">Geburtsdatum</div>
+                <div class="v">{{contract.child.birthDate}}</div>
+            </div>
+        </section>
+
+        <h2>Angaben Eltern</h2>
+        <section class="box">
+            <div class="row">
+                <div class="k">Name</div>
+                <div class="v">
+                    {{contract.parent.salutation}}
+                    {{contract.parent.firstName}}
+                    {{contract.parent.lastName}}
+                </div>
+            </div>
+            <div class="row">
+                <div class="k">Adresse</div>
+                <div class="v">
+                    {{contract.address.street}}
+                    {{contract.address.houseNo}},
+                    {{contract.address.zip}}
+                    {{contract.address.city}}
+                </div>
+            </div>
+            <div class="row">
+                <div class="k">Kontakt</div>
+                <div class="v">
+                    {{contract.parent.email}}
+                    {{#if contract.parent.phone}} · {{contract.parent.phone}}{{/if}}
+                </div>
+            </div>
+        </section>
+
+
+        <h2>Vertragstext</h2>
+        <div class="box contract-text">
+            {{{contract.doc.contentHtml}}}
+        </div>
+
+        <h2>Einwilligungen</h2>
+        <section class="box consentsBox">
+            <div class="check">
+                <div class="sq {{#if contract.consents.termsAccepted}}on{{/if}}">
+                    {{#if contract.consents.termsAccepted}}✓{{/if}}
+                </div>
+                <p class="p">Teilnahmebedingungen (AGB) akzeptiert.</p>
+            </div>
+            <div class="check">
+                <div class="sq {{#if contract.consents.privacyAccepted}}on{{/if}}">
+                    {{#if contract.consents.privacyAccepted}}✓{{/if}}
+                </div>
+                <p class="p">Datenschutzhinweise akzeptiert.</p>
+            </div>
+            <div class="check">
+                <div class="sq {{#if contract.consents.photoVideo}}on{{/if}}">
+                    {{#if contract.consents.photoVideo}}✓{{/if}}
+                </div>
+                <p class="p">Einwilligung Foto/Video (optional).</p>
+            </div>
+        </section>
+
+        <h2>Unterschrift</h2>
+        <section class="box signatureBox">
+            <div class="sig">
+                <div>
+                    <div class="line">{{contract.signature.name}}</div>
+                    <div class="small">Name (digital)</div>
+                </div>
+                <div>
+                    <div class="line">{{contract.signature.signedAt}}</div>
+                    <div class="small">Datum/Uhrzeit</div>
+                </div>
+            </div>
+
+            <div class="footer tech">
+                Signatur technisch erfasst:
+                <span class="mono">{{contract.signature.ip}}</span>
+                ·
+                <span class="mono">{{contract.signature.ua}}</span>
+            </div>
+        </section>
+
+        <footer class="footer legal">
+            Umsatzsteuerbefreit nach § 19 UStG (Kleinunternehmerregelung), sofern zutreffend.
+        </footer>

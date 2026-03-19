@@ -7,33 +7,43 @@
       <mj-divider border-color="#e5e7eb" border-width="1px" />
     </mj-attributes>
     <mj-style inline="inline">
-      .muted { color:#6b7280; }
+      .muted {
+        color: #6b7280;
+      }
     </mj-style>
   </mj-head>
 
   <mj-body background-color="#f5f7fb">
-    <!-- Header (unverändert) -->
     <mj-section background-color="#3e6294" padding="12px 24px">
       <mj-column width="140px" vertical-align="middle">
-        <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0" />
+        <mj-image
+          width="110px"
+          src="{{brand.logoUrl}}"
+          alt="{{brand.company}}"
+          padding="0"
+        />
       </mj-column>
       <mj-column vertical-align="middle">
-        <mj-text font-size="20px" font-weight="700" align="center" padding="0" color="#ffffff">
-          {{brand.company}}
+        <mj-text
+          font-size="20px"
+          font-weight="700"
+          align="center"
+          padding="0"
+          color="#ffffff"
+        >
+          {{ brand.company }}
         </mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Divider -->
     <mj-section background-color="#ffffff" padding="0 24px">
       <mj-column><mj-divider /></mj-column>
     </mj-section>
 
-    <!-- Greeting -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px">
-          Hallo {{greetingName}},
+          Hallo {{ greetingName }},
         </mj-text>
         <mj-spacer height="8px" />
         <mj-text font-size="16px" line-height="24px" padding="0 24px">
@@ -42,57 +52,49 @@
       </mj-column>
     </mj-section>
 
-    <!-- Deine Buchung -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">
-          {{blocks.bookingTitle}} für {{#if booking.childFull}}{{booking.childFull}}{{/if}}
+          {{ blocks.bookingTitle }} für {{#if booking.childFull
+          }}{{ booking.childFull }}{{/if}}
         </mj-text>
         <mj-spacer height="6px" />
-       
 
-
-<mj-text padding="0 24px 6px">
-  {{#if booking.offer}}<b>Kurs:</b> {{courseOnly booking.offer}}<br/>{{/if}}
-  
-   {{#if booking.dayTimes}}<b>Kurstag:</b> {{booking.dayTimes}}<br/>{{/if}}
-  {{#if booking.timeDisplay}}<b>Kurszeit:</b> {{booking.timeDisplay}}<br/>{{/if}}
-  {{#if booking.bookingDateDE}}<b>Start:</b> {{booking.bookingDateDE}}<br/>{{/if}}
-  {{#if booking.venue}}<b>Kursort:</b> {{booking.venue}}{{/if}}
-</mj-text>
-
-
-
+        <mj-text padding="0 24px 6px">
+          {{#if booking.offer}}<b>Kurs:</b> {{courseOnly booking.offer
+          }}<br />{{/if}} {{#if booking.dayTimes}}<b>Kurstag:</b>
+          {{ booking.dayTimes }}<br />{{/if}} {{#if booking.timeDisplay
+          }}<b>Kurszeit:</b> {{ booking.timeDisplay }}<br />{{/if}}
+          {{#if booking.bookingDateDE}}<b>Start:</b> {{ booking.bookingDateDE
+          }}<br />{{/if}} {{#if booking.venue}}<b>Kursort:</b> {{ booking.venue
+          }}{{/if}}
+        </mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Kontaktdaten -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">
-          {{blocks.contactTitle}}
+          {{ blocks.contactTitle }}
         </mj-text>
         <mj-spacer height="6px" />
-       
 
         <mj-text padding="0 24px">
-  {{#if customer.parentFull}}{{customer.parentFull}}<br/>{{/if}}
+          {{#if customer.parentFull}}{{ customer.parentFull }}<br />{{/if}}
 
-  {{#if customer.addressLine1}}
-    {{customer.addressLine1}}<br/>
-    {{#if customer.addressLine2}}{{customer.addressLine2}}<br/>{{/if}}
-  {{else}}
-    {{#if customer.address}}{{customer.address}}<br/>{{/if}}
-  {{/if}}
+          {{#if customer.addressLine1}}
+          {{ customer.addressLine1 }}<br />
+          {{#if customer.addressLine2}}{{ customer.addressLine2 }}<br />{{/if}}
+          {{else}}
+          {{#if customer.address}}{{ customer.address }}<br />{{/if}}
+          {{/if}}
 
-  {{#if customer.phone}}{{customer.phone}}<br/>{{/if}}
-  {{#if customer.email}}{{customer.email}}{{/if}}
-</mj-text>
-
+          {{#if customer.phone}}{{ customer.phone }}<br />{{/if}}
+          {{#if customer.email}}{{ customer.email }}{{/if}}
+        </mj-text>
       </mj-column>
     </mj-section>
 
-    <!-- Hinweis auf Rechnung -->
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text padding="0 24px">
@@ -101,60 +103,131 @@
       </mj-column>
     </mj-section>
 
-    <!-- Signatur (unverändert) -->
+    {{#if revocationUrl}}
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text padding="0 24px">
+          Wenn du deinen Vertrag innerhalb von 14 Tagen widerrufen möchtest,
+          kannst du dafür den folgenden Link nutzen:
+        </mj-text>
+        <mj-button
+          href="{{revocationUrl}}"
+          background-color="#111827"
+          color="#ffffff"
+          font-size="15px"
+          font-weight="700"
+          border-radius="12px"
+          inner-padding="14px 22px"
+          padding="12px 24px 0"
+        >
+          Vertrag widerrufen
+        </mj-button>
+      </mj-column>
+    </mj-section>
+    {{/if}}
+
     <mj-section background-color="#ffffff" padding="20px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
-          {{signature.signoff}},<br/>{{signature.name}}<br/>
-          <strong>Dein Trainer-Team</strong><br/>
+          {{ signature.signoff }},<br />{{ signature.name }}<br />
+          <strong>Dein Trainer-Team</strong><br />
         </mj-text>
         <mj-divider />
       </mj-column>
     </mj-section>
 
-    <!-- Social (unverändert inkl. TikTok-Link) -->
     <mj-section background-color="#ffffff" padding="8px 0 0">
       <mj-column>
-        <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
-          <mj-social-element name="facebook" href="https://www.facebook.com/muenchner.fussball.schule.ruhr" />
-          <mj-social-element name="instagram" href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de" />
-          <mj-social-element name="web" href="https://www.tiktok.com/@mfs_fussballtraining_nrw?" />
-          <mj-social-element name="youtube" href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA" />
+        <mj-social
+          align="center"
+          mode="horizontal"
+          icon-size="22px"
+          inner-padding="8px 6px"
+          text-mode="hidden"
+        >
+          <mj-social-element
+            name="facebook"
+            href="https://www.facebook.com/muenchner.fussball.schule.ruhr"
+          />
+          <mj-social-element
+            name="instagram"
+            href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de"
+          />
+          <mj-social-element
+            name="web"
+            href="https://www.tiktok.com/@mfs_fussballtraining_nrw?"
+          />
+          <mj-social-element
+            name="youtube"
+            href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA"
+          />
         </mj-social>
       </mj-column>
     </mj-section>
 
-    <!-- Footer (unverändert) -->
     <mj-section background-color="#f1f5f9" padding="0 0 16px 0">
       <mj-column>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="12px 24px 0">
-          © 2025, {{brand.company}} – alle Rechte vorbehalten.
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="12px 24px 0"
+        >
+          © 2025, {{ brand.company }} – alle Rechte vorbehalten.
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
-          {{brand.addr1}}<br/>{{brand.addr2}}
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
+          {{ brand.addr1 }}<br />{{ brand.addr2 }}
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
-          Telefon: <a href="tel:+4917643203362" style="color:#0f172a; text-decoration:none;">0176 4320 3362</a>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
+          Telefon:
+          <a
+            href="tel:+4917643203362"
+            style="color: #0f172a; text-decoration: none"
+            >0176 4320 3362</a
+          >
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
-          E-Mail: <a href="mailto:{{brand.email}}" style="color:#0f172a; text-decoration:none;">{{brand.email}}</a>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
+          E-Mail:
+          <a
+            href="mailto:{{brand.email}}"
+            style="color: #0f172a; text-decoration: none"
+            >{{ brand.email }}</a
+          >
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 8px">
-          Website: <a href="{{brand.website}}" style="color:#0f172a; text-decoration:none;">{{brand.website}}</a>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 8px"
+        >
+          Website:
+          <a
+            href="{{brand.website}}"
+            style="color: #0f172a; text-decoration: none"
+            >{{ brand.website }}</a
+          >
         </mj-text>
       </mj-column>
     </mj-section>
   </mj-body>
 </mjml>
-
-
-
-
-
-
-
-
-
-
-
-

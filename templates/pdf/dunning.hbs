@@ -1,0 +1,261 @@
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{dunning.stageLabel}} – {{brand.company}}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="./_base.css" />
+    <link rel="stylesheet" href="./dunning.css" />
+  </head>
+  <body>
+    <main class="doc doc-dunning">
+      <div class="topband">
+        <span class="claim">{{brand.company}}</span>
+        <span class="right"></span>
+        {{#if brand.logoUrl}}
+          <img
+            class="brand-logo"
+            src="{{brand.logoUrl}}"
+            alt="{{brand.company}}"
+          />
+        {{/if}}
+      </div>
+
+      <div class="addr">
+        {{#if customer.parent.salutation}}
+          <span class="line">{{customer.parent.salutation}}</span>
+        {{/if}}
+        <span class="line">{{customer.parent.firstName}}
+          {{customer.parent.lastName}}</span>
+        {{#if customer.address.street}}
+          <span class="line">
+            {{customer.address.street}}{{#if customer.address.houseNo}}
+              {{customer.address.houseNo}}{{/if}}
+          </span>
+        {{/if}}
+        {{#if customer.address.zip}}
+          <span class="line">
+            {{customer.address.zip}}{{#if customer.address.city}}
+              {{customer.address.city}}{{/if}}
+          </span>
+        {{/if}}
+      </div>
+
+      <h1 class="subject subject-dunning">{{dunning.stageLabel}}</h1>
+
+      <div class="facts facts-dunning-meta">
+        <div class="row">
+          <span class="k">Datum:</span>
+          <span class="v">{{fmtDate dunning.issuedAt}}</span>
+        </div>
+
+        <div class="row">
+          <span class="k">Bezug:</span>
+          <span class="v">
+            {{#if booking.docNo}}
+              zu Ihrer Rechnung
+              <span class="mono">{{booking.docNo}}</span>{{#if
+                booking.invoiceDate
+              }} vom {{fmtDate booking.invoiceDate}}{{/if}}
+            {{else if booking.invoiceNo}}
+              zu Ihrer Rechnung
+              <span class="mono">{{booking.invoiceNo}}</span>{{#if
+                booking.invoiceDate
+              }} vom {{fmtDate booking.invoiceDate}}{{/if}}
+            {{else}}
+              zu Ihrer offenen Forderung
+            {{/if}}
+          </span>
+        </div>
+
+        {{#if customer.userId}}
+          <div class="row">
+            <span class="k">Kunden-Nr.:</span>
+            <span class="v">{{customer.userId}}</span>
+          </div>
+        {{/if}}
+      </div>
+
+
+      <div class="intro intro-dunning">
+  {{formalGreeting customer.parent}}
+</div>
+
+      <div class="notes notes-dunning-letter">
+        {{#if (eq dunning.stage "reminder")}}
+          <p>
+            die Lastschrift zu der oben genannten Rechnung konnte von Ihrer Bank
+            nicht erfolgreich eingelöst werden.
+          </p>
+          {{#if dunning.returnBankFee}}
+            <p>
+              Dadurch sind zusätzliche Rücklastschriftgebühren in Höhe von
+              <strong>{{dunning.returnBankFeeText}}</strong>
+              angefallen.
+            </p>
+          {{/if}}
+          <p>
+            Bitte gleichen Sie die offene Forderung innerhalb der unten
+            genannten Frist aus.
+          </p>
+
+        {{else if (eq dunning.stage "dunning1")}}
+          <p>
+            trotz unserer zuvor versandten Zahlungserinnerung konnten wir
+            bislang keinen vollständigen Zahlungseingang zu der oben genannten
+            Rechnung feststellen.
+          </p>
+          <p>
+            Wir bitten Sie, den offenen Betrag fristgerecht auszugleichen.
+          </p>
+
+        {{else if (eq dunning.stage "dunning2")}}
+          <p>
+            trotz unserer bisherigen Zahlungserinnerung und Mahnung konnten wir
+            bislang keinen vollständigen Zahlungseingang feststellen.
+          </p>
+          <p>
+            Wir fordern Sie daher erneut auf, den offenen Gesamtbetrag innerhalb
+            der unten genannten Frist zu begleichen.
+          </p>
+
+        {{else if (eq dunning.stage "final")}}
+          <p>
+            trotz unserer vorherigen Zahlungserinnerungen / Mahnungen konnten
+            wir bis heute keinen vollständigen Zahlungseingang feststellen.
+          </p>
+          <p>
+            Wir fordern Sie hiermit letztmalig auf, den offenen Gesamtbetrag
+            innerhalb der unten genannten Frist zu begleichen. Sollte die
+            Zahlung nicht fristgerecht eingehen, behalten wir uns die Einleitung
+            gerichtlicher Schritte bzw. die Übergabe an ein Inkassoverfahren
+            ohne weitere Ankündigung vor.
+          </p>
+
+        {{else}}
+          <p>
+            bitte begleichen Sie die unten aufgeführte offene Forderung
+            innerhalb der genannten Frist.
+          </p>
+        {{/if}}
+      </div>
+
+      <div class="sep-line"></div>
+
+      <div class="section-title">Offene Beträge</div>
+      <table class="items dunning-items" role="presentation">
+        <tr class="dunning-items-head">
+          <td class="desc muted small"><strong>Position</strong></td>
+          <td class="amt muted small"><strong>Betrag</strong></td>
+        </tr>
+
+        <tr>
+          <td class="desc">Offener Rechnungsbetrag</td>
+          <td class="amt">{{dunning.baseAmountText}}</td>
+        </tr>
+
+        {{#if dunning.returnBankFee}}
+          <tr>
+            <td class="desc">Rücklastschriftgebühr</td>
+            <td class="amt">{{dunning.returnBankFeeText}}</td>
+          </tr>
+        {{/if}}
+
+        {{#if dunning.dunningFee}}
+          <tr>
+            <td class="desc">Mahngebühr</td>
+            <td class="amt">{{dunning.dunningFeeText}}</td>
+          </tr>
+        {{/if}}
+
+        {{#if dunning.processingFee}}
+          <tr>
+            <td class="desc">Bearbeitungsgebühr</td>
+            <td class="amt">{{dunning.processingFeeText}}</td>
+          </tr>
+        {{/if}}
+      </table>
+
+      <div class="total-line dunning-total-line">
+        <span class="label">Gesamt offen:</span>
+        <span class="value">{{dunning.totalDueText}}</span>
+      </div>
+
+      <div class="sep-line"></div>
+
+      <div class="section-title">Zahlungsfrist</div>
+      <div class="notes notes-dunning-deadline">
+        <p>
+          {{#if dunning.dueAt}}
+            Bitte begleichen Sie den offenen Betrag bis spätestens
+            <strong>{{fmtDate dunning.dueAt}}</strong>.
+          {{else}}
+            Bitte begleichen Sie den offenen Betrag zeitnah.
+          {{/if}}
+        </p>
+      </div>
+
+      <div class="payment-note payment-note-dunning">
+        <div>
+          {{#if (eq dunning.stage "final")}}
+            Hat sich diese Mahnung mit Ihrer Zahlung überschnitten, bitten wir
+            Sie, dieses Schreiben als gegenstandslos zu betrachten.
+          {{else}}
+            Sofern Sie die Zahlung zwischenzeitlich veranlasst haben, bitten wir
+            Sie, dieses Schreiben als gegenstandslos zu betrachten.
+          {{/if}}
+        </div>
+
+        {{#if dunning.freeText}}
+          <div class="dunning-free-text">
+            {{dunning.freeText}}
+          </div>
+        {{/if}}
+      </div>
+
+      <div class="dunning-signoff">
+        <p>Mit sportlichen Grüßen</p>
+        <p><strong>{{brand.company}}</strong></p>
+      </div>
+
+     
+      <div class="footer-spacer dunning-footer-spacer {{#if (eq dunning.stage "final")}}dunning-footer-spacer-final{{/if}}"></div>
+      <footer class="footer">
+        <table
+          class="footer-table"
+          cellspacing="0"
+          cellpadding="0"
+          role="presentation"
+        >
+          <tr>
+            <td class="footer-col brand">
+              <strong>Münchner Fussball Schule NRW</strong><br />
+              Hochfelder Straße 33<br />
+              47226 Duisburg<br />
+              Deutschland
+            </td>
+            <td class="footer-col meta">
+              <span class="k">Inhaber:</span>
+              <span class="v">Selcuk Kocyigit</span><br />
+              <span class="k">Tel.:</span>
+              <span class="v">0176-43203362</span><br />
+              <a
+                href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr"
+              >s.kocyigit@muenchner-fussball-schule.ruhr</a><br />
+              <a
+                href="https://muenchner-fussball-schule.ruhr"
+              >https://muenchner-fussball-schule.ruhr</a>
+            </td>
+            <td class="footer-col bank">
+              <span class="k">Bank:</span>
+              <span class="v">Commerzbank</span><br />
+              <span class="k">IBAN:</span>
+              <span class="v nowrap">DE13350400380595090200</span><br />
+              <span class="k">BIC:</span>
+              <span class="v nowrap">COBADEFFXXX</span>
+            </td>
+          </tr>
+        </table>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,243 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" color="#111827" />
+      <mj-text font-size="14px" line-height="22px" />
+      <mj-section background-color="#ffffff" padding="0px" />
+      <mj-divider border-color="#e5e7eb" border-width="1px" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f5f7fb">
+    <mj-section background-color="#3e6294" padding="12px 24px">
+      <mj-column width="100%" vertical-align="middle">
+        {{#if brand.logoUrl}}
+        <mj-image
+          width="110px"
+          src="{{brand.logoUrl}}"
+          alt="{{brand.company}}"
+          padding="0 0 6px 0"
+          align="center"
+        />
+        {{/if}}
+        <mj-text
+          font-size="18px"
+          font-weight="700"
+          align="center"
+          padding="0"
+          color="#ffffff"
+        >
+          {{ brand.company }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="0 24px">
+      <mj-column>
+        <mj-divider />
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          {{ salutation }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="8px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px">
+          anbei erhalten Sie unsere <strong>{{ stageLabel }}</strong>
+          {{#if docNo}}
+          zu Ihrer Rechnung <strong>{{ docNo }}</strong>
+          {{else}}
+          zu Ihrer offenen Forderung
+          {{/if}}.
+        </mj-text>
+
+        {{#if (eq stage "reminder")}}
+        <mj-text padding="8px 24px 0">
+          Die Lastschrift konnte von Ihrer Bank nicht erfolgreich eingelöst
+          werden.
+          {{#if hasReturnBankFee}}
+          Dadurch sind zusätzliche Rücklastschriftgebühren angefallen.
+          {{/if}}
+        </mj-text>
+        {{else if (eq stage "dunning1")}}
+        <mj-text padding="8px 24px 0">
+          trotz unserer zuvor versandten Zahlungserinnerung konnten wir bislang
+          keinen Zahlungseingang zu der oben genannten Rechnung feststellen.
+        </mj-text>
+        {{else if (eq stage "dunning2")}}
+        <mj-text padding="8px 24px 0">
+          trotz unserer bisherigen Erinnerungen konnten wir bislang keinen
+          vollständigen Zahlungseingang zu der oben genannten Rechnung
+          feststellen.
+        </mj-text>
+        {{else if (eq stage "final")}}
+        <mj-text padding="8px 24px 0">
+          dies ist unsere letzte Mahnung. Sollte die Zahlung nicht fristgerecht
+          eingehen, behalten wir uns weitere Schritte (inkl. Inkasso /
+          gerichtliches Mahnverfahren) vor.
+        </mj-text>
+        {{else}}
+        <mj-text padding="8px 24px 0">
+          bitte prüfen Sie die offene Forderung und gleichen Sie diese
+          fristgerecht aus.
+        </mj-text>
+        {{/if}}
+
+        <mj-text padding="8px 24px 0">
+          Die vollständigen Details entnehmen Sie bitte dem beigefügten PDF.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="16px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" font-weight="700" padding="0 24px">
+          Übersicht
+        </mj-text>
+        <mj-spacer height="6px" />
+        <mj-text padding="0 24px">
+          {{#if docNo}}<b>Rechnungsnr.:</b> {{ docNo }}<br />{{/if}}
+          <b>Offener Rechnungsbetrag:</b> {{ baseAmountText }}<br />
+          {{#if hasReturnBankFee}}<b>Rücklastschriftgebühr:</b>
+          {{ returnBankFeeText }}<br />{{/if}}
+          {{#if hasDunningFee
+
+
+
+
+          }}<b>Mahngebühr:</b> {{ dunningFeeText }}<br />{{/if}}
+          {{#if hasProcessingFee}}<b>Bearbeitungsgebühr:</b>
+          {{ processingFeeText }}<br />{{/if}} <b>Gesamt offen:</b>
+          <strong>{{ totalDueText }}</strong
+          ><br />
+          <b>Fällig bis:</b> {{ dueAtText }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="14px 0 0">
+      <mj-column>
+        <mj-text padding="0 24px">
+          {{#if (eq stage "final")}}
+          Hat sich diese Mahnung mit Ihrer Zahlung überschnitten, bitten wir
+          Sie, dieses Schreiben als gegenstandslos zu betrachten.
+          {{else}}
+          Sofern Sie die Zahlung zwischenzeitlich veranlasst haben, bitten wir
+          Sie, dieses Schreiben als gegenstandslos zu betrachten.
+          {{/if}}
+        </mj-text>
+
+        {{#if freeText}}
+        <mj-text padding="10px 24px 0">
+          <b>Hinweis:</b> {{ freeText }}
+        </mj-text>
+        {{/if}}
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="18px 0 0">
+      <mj-column>
+        <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
+          Mit sportlichen Grüßen<br />
+          <strong>{{ brand.company }}</strong>
+        </mj-text>
+        <mj-divider />
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="8px 0 0">
+      <mj-column>
+        <mj-social
+          align="center"
+          mode="horizontal"
+          icon-size="22px"
+          inner-padding="8px 6px"
+        >
+          <mj-social-element
+            name="facebook"
+            href="https://www.facebook.com/muenchner.fussball.schule.ruhr"
+          />
+          <mj-social-element
+            name="instagram"
+            href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de"
+          />
+          <mj-social-element
+            name="web"
+            href="https://www.tiktok.com/@mfs_fussballtraining_nrw?"
+          />
+          <mj-social-element
+            name="youtube"
+            href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA"
+          />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#f3f4f6" padding="12px 24px 16px">
+      <mj-column>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="0 0 8px 0"
+        >
+          © 2026, {{ brand.company }} – alle Rechte vorbehalten.
+        </mj-text>
+
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="0"
+        >
+          {{ brand.addr1 }}<br />
+          {{ brand.addr2 }}
+        </mj-text>
+
+        {{#if brand.email}}
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="8px 0 0"
+        >
+          E-Mail:
+          <a
+            href="mailto:{{brand.email}}"
+            style="color: #0f172a; text-decoration: none"
+          >
+            {{ brand.email }}
+          </a>
+        </mj-text>
+        {{/if}}
+
+        {{#if brand.website}}
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 0 0"
+        >
+          Website:
+          <a
+            href="{{brand.website}}"
+            style="color: #0f172a; text-decoration: none"
+          >
+            {{ brand.website }}
+          </a>
+        </mj-text>
+        {{/if}}
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -1,75 +1,96 @@
-
 // routes/adminInvoices.js
-'use strict';
-const express  = require('express');
-const mongoose = require('mongoose');
+"use strict";
+
+const DEBUG_INVOICES = process.env.DEBUG_INVOICES === "1";
+
+const express = require("express");
+const mongoose = require("mongoose");
 const { Types } = mongoose;
 
 const router = express.Router();
 
-/* ---------- Datum normalisieren (Filter) ---------- */
+const BillingDocument = require("../models/BillingDocument");
+const { archiveDunningPdf } = require("../utils/dunningArchive");
+const { buildCsvText } = require("./adminInvoices/csvExportShared");
+
+const {
+  makeSendDocumentEmailHandler,
+} = require("./adminInvoices/handlers/sendDocumentEmail");
+
+const {
+  buildExportListWithDunning,
+} = require("./adminInvoices/exportListWithDunning");
+
+function getMailer() {
+  return require("../utils/mailer");
+}
+
+const { normalizeInvoiceNo } = require("../utils/pdfData");
+
+const sendDocumentEmailHandler = makeSendDocumentEmailHandler({
+  mongoose,
+  Types,
+  getModels,
+  requireOwner,
+  loadOwnedBooking,
+  findCustomerAndBookingByBookingId,
+  getMailer,
+});
+
+router.post("/:bookingId/send-document-email", sendDocumentEmailHandler);
+
 function normalizeFilterDate(input) {
   if (!input) return null;
   const s = String(input).trim();
   if (!s) return null;
 
-  // 1) yyyy-mm-dd
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
-  // 2) dd.mm.yyyy
   m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
 
-  // unbekanntes Format -> lieber ignorieren
   return null;
 }
 
-/* ---------- models: aus app.locals, sonst require() ---------- */
 function getModels(req) {
   const Customer =
-    req.app?.locals?.models?.Customer || require('../models/Customer');
+    req.app?.locals?.models?.Customer || require("../models/Customer");
   const Booking =
-    req.app?.locals?.models?.Booking || require('../models/Booking');
+    req.app?.locals?.models?.Booking || require("../models/Booking");
   return { Customer, Booking };
 }
 
-/* ---------- tenant helper: x-provider-id ---------- */
 function getProviderIdRaw(req) {
-  const v = req.get('x-provider-id');
+  const v = req.get("x-provider-id");
   return v ? String(v).trim() : null;
 }
+
 function requireOwner(req, res) {
   const raw = getProviderIdRaw(req);
   if (!raw || !mongoose.isValidObjectId(raw)) {
     res
       .status(401)
-      .json({ ok: false, error: 'Unauthorized: invalid provider id' });
+      .json({ ok: false, error: "Unauthorized: invalid provider id" });
     return null;
   }
   return new Types.ObjectId(raw);
 }
 
-/* ---------- utils ---------- */
 function clamp(n, min, max) {
-  n = Number(n);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
+  const x = Number(n);
+  if (!Number.isFinite(x)) return min;
+  return Math.max(min, Math.min(max, x));
 }
+
 function normalizeSort(s) {
-  const def = { field: 'issuedAt', dir: -1 };
+  const def = { field: "issuedAt", dir: -1 };
   if (!s) return def;
-  const [field, dir] = String(s).split(':');
+  const [field, dir] = String(s).split(":");
   const map = { asc: 1, ASC: 1, desc: -1, DESC: -1 };
   return { field: field || def.field, dir: map[dir] ?? def.dir };
 }
-function toDateOnlyString(d) {
-  try {
-    return new Date(d).toISOString().slice(0, 10);
-  } catch {
-    return null;
-  }
-}
+
 function toISO(d) {
   try {
     return new Date(d).toISOString();
@@ -77,189 +98,462 @@ function toISO(d) {
     return null;
   }
 }
-function matchesQ(str, q) {
-  if (!q) return true;
-  if (!str) return false;
-  return String(str).toLowerCase().includes(String(q).toLowerCase());
+
+function norm(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase();
 }
 
-/* ---------- map one booking -> logical docs ---------- */
-/**
- * Gibt bis zu drei Einträge zurück:
- * - participation: wenn invoiceNumber/invoiceDate vorhanden ODER Holiday-Programm
- * - cancellation : wenn cancellationNo/Number ODER cancelDate/cancellationDate vorhanden
- * - storno       : wenn stornoNo/Number ODER stornoDate vorhanden
- */
-function docsFromBooking(customer, b) {
-  const items = [];
-  const baseTitle = b.offerTitle || b.offerType || 'Booking';
+function isDigitsOnly(s) {
+  return /^\d+$/.test(String(s || "").trim());
+}
 
-  const invNo   = b.invoiceNumber || b.invoiceNo || null;
+function docNoFrom(r) {
+  return String(
+    r.creditNoteNo ||
+      r.invoiceNo ||
+      r.invoiceNumber ||
+      r.cancellationNo ||
+      r.stornoNo ||
+      r.stornoNumber ||
+      "",
+  ).trim();
+}
+
+function matchesInvoiceQuery({ q, customerNumber, docNo, blob }) {
+  const raw = String(q || "").trim();
+  if (!raw) return true;
+
+  if (isDigitsOnly(raw)) {
+    return String(customerNumber ?? "").trim() === raw;
+  }
+
+  const qq = norm(raw);
+  const dn = norm(docNo);
+  if (dn && dn.includes(qq)) return true;
+
+  const dnDash = norm(String(docNo || "").replace(/\//g, "-"));
+  if (dnDash && dnDash.includes(qq)) return true;
+
+  return norm(blob).includes(qq);
+}
+
+function fullName(p) {
+  const first = String(p?.firstName || "").trim();
+  const last = String(p?.lastName || "").trim();
+  return [first, last].filter(Boolean).join(" ").trim();
+}
+
+function customerNameFrom(customer) {
+  return fullName(customer?.parent) || "";
+}
+
+function customerChildNameFrom(customer) {
+  return fullName(customer?.child) || "";
+}
+
+function docsFromBooking(customer, b, state) {
+  const items = [];
+  const baseTitle = b.offerTitle || b.offerType || "Booking";
+
+  const customerName = customerNameFrom(customer);
+  const customerChildName = customerChildNameFrom(customer);
+
+  const bookingRefId = String(b.bookingId || b._id || "").trim();
+  const rowIdBase = String(b._id || bookingRefId || "").trim();
+
+  if (!bookingRefId) return items;
+
+  const invNo = b.invoiceNumber || b.invoiceNo || null;
   const invDate = b.invoiceDate || null;
 
-  const cancNo   = b.cancellationNo || b.cancellationNumber || null;
+  const cancNo = b.cancellationNo || b.cancellationNumber || null;
   const cancDate = b.cancelDate || b.cancellationDate || null;
 
-  const storNo   = b.stornoNo || b.stornoNumber || null;
+  const storNo = b.stornoNo || b.stornoNumber || null;
   const storDate = b.stornoDate || null;
 
-  // Holiday (Camp / Powertraining) am Text erkennen
-  const textForType = `${b.offerTitle || ''} ${b.offerType || ''}`.toLowerCase();
+  const statusLower = String(b.status || "").toLowerCase();
+
+  const textForType =
+    `${b.offerTitle || ""} ${b.offerType || ""}`.toLowerCase();
   const isHoliday = /camp|feriencamp|holiday|powertraining|power training/.test(
-    textForType
+    textForType,
   );
 
-  // Participation-Datum: bevorzugt invoiceDate, sonst createdAt, zuletzt b.date
-  const issuedParticipation =
-    invDate ||
-    b.createdAt ||
-    b.date ||
-    null;
+  const issuedParticipation = invDate || b.createdAt || b.date || null;
 
-  // PARTICIPATION:
-  // - normale Rechnung (invNo / invDate)
-  // - oder Holiday-Programm (Camp / Powertraining) auch ohne invoiceNo
   if (invNo || invDate || isHoliday) {
     items.push({
-      id: `inv:${b._id}`,
-      bookingId: String(b._id),
+      id: `inv:${rowIdBase}`,
+      bookingId: bookingRefId,
       customerId: String(customer._id),
-      type: 'participation',
+      type: "participation",
       title: `${baseTitle} – Teilnahmebestätigung`,
       issuedAt: issuedParticipation ? toISO(issuedParticipation) : undefined,
       offerTitle: b.offerTitle || undefined,
       offerType: b.offerType || undefined,
-      amount:
-        b.priceAtBooking != null ? Number(b.priceAtBooking) : undefined,
-      currency: b.currency || 'EUR',
+      amount: b.priceAtBooking != null ? Number(b.priceAtBooking) : undefined,
+      currency: b.currency || "EUR",
+      customerNumber: customer.userId,
+      customerName: customerName || undefined,
+      customerChildName: customerChildName || undefined,
+      invoiceNo: invNo || undefined,
+      invoiceNumber: invNo || undefined,
       href: `/api/admin/bookings/${encodeURIComponent(
-        b._id
+        bookingRefId,
       )}/documents/participation`,
+      exportHref: `/api/admin/customers/${encodeURIComponent(
+        String(customer._id),
+      )}/bookings/${encodeURIComponent(bookingRefId)}/participation.pdf`,
     });
   }
 
-  // CANCELLATION: bevorzugt cancelDate, sonst updatedAt/createdAt
-  const issuedCancellation =
-    cancDate ||
-    b.updatedAt ||
-    b.createdAt ||
-    null;
+  const issuedCancellation = cancDate || b.updatedAt || b.createdAt || null;
+  const hasStorno = Boolean(storNo || storDate || statusLower === "storno");
+  const hasCancellation = Boolean(
+    cancNo || cancDate || statusLower === "cancelled",
+  );
 
-  //if (cancNo || cancDate || String(b.status).toLowerCase() === 'cancelled') {
-    // Für Holiday-Programme (Camp/Powertraining) KEINE Kündigungsbestätigung
-  if (
-    !isHoliday &&
-    (cancNo || cancDate || String(b.status).toLowerCase() === 'cancelled')
-  ) {
-
+  if (!isHoliday && !hasStorno && hasCancellation) {
     items.push({
-      id: `can:${b._id}`,
-      bookingId: String(b._id),
+      id: `can:${rowIdBase}`,
+      bookingId: bookingRefId,
       customerId: String(customer._id),
-      type: 'cancellation',
+      type: "cancellation",
       title: `${baseTitle} – Kündigungsbestätigung`,
       issuedAt: issuedCancellation ? toISO(issuedCancellation) : undefined,
       offerTitle: b.offerTitle || undefined,
       offerType: b.offerType || undefined,
+      customerNumber: customer.userId,
+      customerName: customerName || undefined,
+      customerChildName: customerChildName || undefined,
+      cancellationNo: cancNo || undefined,
       href: `/api/admin/bookings/${encodeURIComponent(
-        b._id
+        bookingRefId,
       )}/documents/cancellation`,
+      exportHref: `/api/admin/customers/${encodeURIComponent(
+        String(customer._id),
+      )}/bookings/${encodeURIComponent(bookingRefId)}/cancellation.pdf`,
     });
   }
 
-  // STORNO: bevorzugt stornoDate, sonst cancelDate
-  const issuedStorno =
-    storDate ||
-    cancDate ||
-    null;
+  const issuedStorno = storDate || cancDate || null;
 
-  if (storNo || storDate) {
+  if (storNo || storDate || statusLower === "storno") {
     items.push({
-      id: `sto:${b._id}`,
-      bookingId: String(b._id),
+      id: `sto:${rowIdBase}`,
+      bookingId: bookingRefId,
       customerId: String(customer._id),
-      type: 'storno',
+      type: "storno",
       title: `${baseTitle} – Storno-Rechnung`,
       issuedAt: issuedStorno ? toISO(issuedStorno) : undefined,
       offerTitle: b.offerTitle || undefined,
       offerType: b.offerType || undefined,
-      amount:
-        b.stornoAmount != null ? Number(b.stornoAmount) : undefined,
-      currency: b.currency || 'EUR',
+      amount: b.stornoAmount != null ? Number(b.stornoAmount) : undefined,
+      currency: b.currency || "EUR",
+      customerNumber: customer.userId,
+      customerName: customerName || undefined,
+      customerChildName: customerChildName || undefined,
+      stornoNo: storNo || undefined,
+      stornoNumber: storNo || undefined,
       href: `/api/admin/bookings/${encodeURIComponent(
-        b._id
+        bookingRefId,
       )}/documents/storno`,
+      exportHref: `/api/admin/customers/${encodeURIComponent(
+        String(customer._id),
+      )}/bookings/${encodeURIComponent(bookingRefId)}/storno.pdf`,
     });
   }
 
-  console.log('[DOC_FROM_BOOKING]', {
-    bookingId: b._id,
-    offerTitle: b.offerTitle,
-    invoiceDate: b.invoiceDate,
-    createdAt: b.createdAt,
-    cancelDate: b.cancelDate || null,
-    stornoDate: b.stornoDate || null,
-    isHoliday,
-    issuedParticipation,
-  });
+  if (DEBUG_INVOICES) {
+    console.log("[DOC_FROM_BOOKING]", {
+      bookingId: b._id,
+      bookingRefId,
+      offerTitle: b.offerTitle,
+      invoiceDate: b.invoiceDate,
+      createdAt: b.createdAt,
+      cancelDate: b.cancelDate || null,
+      stornoDate: b.stornoDate || null,
+      isHoliday,
+      issuedParticipation,
+      status: statusLower,
+      hasStorno,
+      hasCancellation,
+      customerNumber: customer.userId,
+      customerName,
+      customerChildName,
+      invNo,
+      cancNo,
+      storNo,
+    });
+  }
+
+  const refMeta = b && typeof b.meta === "object" ? b.meta : {};
+  const stateMeta = state && typeof state.meta === "object" ? state.meta : {};
+  const meta = { ...refMeta, ...stateMeta };
+
+  const creditNo = String(meta.creditNoteNo || "").trim();
+  const creditDateRaw = String(meta.creditNoteDate || "").trim();
+  const creditIssued =
+    creditDateRaw || b.returnedAt || state?.returnedAt || null;
+
+  if (creditNo) {
+    items.push({
+      id: `cr:${rowIdBase}:${creditNo.replace(/[^\w.-]+/g, "_")}`,
+      bookingId: bookingRefId,
+      customerId: String(customer._id),
+      type: "creditnote",
+      title: `${baseTitle} – Gutschrift`,
+      issuedAt: creditIssued ? toISO(creditIssued) : undefined,
+      offerTitle: b.offerTitle || undefined,
+      offerType: b.offerType || undefined,
+      amount:
+        meta.creditNoteAmount != null
+          ? Number(meta.creditNoteAmount)
+          : undefined,
+      currency: b.currency || "EUR",
+      customerNumber: customer.userId,
+      customerName: customerName || undefined,
+      customerChildName: customerChildName || undefined,
+      creditNoteNo: creditNo,
+      href: `/api/admin/customers/bookings/${encodeURIComponent(
+        bookingRefId,
+      )}/credit-note.pdf`,
+      fileName: `Gutschrift-${creditNo.replace(/[^\w.-]+/g, "_")}`,
+    });
+  }
 
   return items;
 }
 
-/* ---------- Zentrale Listen-Funktion ---------- */
-/**
- * Baut die Liste der Rechnungs-Dokumente.
- * Wird sowohl von GET '/' als auch von GET '/csv' verwendet,
- * damit Filter/Datum/Limit immer identisch sind.
- */
-async function buildInvoiceList({ owner, Customer, query }) {
+function issuedTime(v) {
+  if (!v) return 0;
+  const t = v instanceof Date ? v.getTime() : Date.parse(String(v));
+  return Number.isFinite(t) ? t : 0;
+}
+
+function docNoKey(it) {
+  return String(docNoFrom(it) || "").trim();
+}
+
+function docNoCompare(a, b) {
+  return docNoKey(a).localeCompare(docNoKey(b), "de", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function parseSelectedIds(query) {
+  return new Set(
+    String(query.ids || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function docStageOf(item) {
+  return String(item?.stage || item?.lastDunningStage || "")
+    .trim()
+    .toLowerCase();
+}
+
+function docIdKeys(item) {
+  const id = String(item?.id || "").trim();
+  const type = String(item?.type || "")
+    .trim()
+    .toLowerCase();
+  const bookingId = String(item?.bookingId || "").trim();
+  const docNo = String(docNoFrom(item) || "")
+    .trim()
+    .toLowerCase();
+  const stage = docStageOf(item);
+
+  return [
+    id,
+    [type, bookingId].filter(Boolean).join("|"),
+    [type, bookingId, docNo].filter(Boolean).join("|"),
+    [type, bookingId, stage].filter(Boolean).join("|"),
+    [type, bookingId, docNo, stage].filter(Boolean).join("|"),
+  ].filter(Boolean);
+}
+
+function selectedIdKeys(selectedIds) {
+  const out = new Set();
+
+  for (const raw of selectedIds) {
+    const id = String(raw || "").trim();
+    if (!id) continue;
+
+    out.add(id);
+
+    if (id.startsWith("inv:")) {
+      out.add(`participation|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("can:")) {
+      out.add(`cancellation|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("sto:")) {
+      out.add(`storno|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("cr:")) {
+      const rest = id.slice(3);
+      const firstColon = rest.indexOf(":");
+
+      if (firstColon >= 0) {
+        const bookingKey = rest.slice(0, firstColon).trim();
+        const creditNo = rest
+          .slice(firstColon + 1)
+          .trim()
+          .toLowerCase();
+
+        out.add(`creditnote|${bookingKey}`);
+        out.add(`creditnote|${bookingKey}|${creditNo}`);
+      }
+    }
+
+    if (id.startsWith("dunning:")) {
+      const rest = id.slice(4);
+      const parts = rest.split(":").map((v) => String(v || "").trim());
+      const bookingKey = parts[0] || "";
+      const stage = String(parts[1] || "").toLowerCase();
+
+      if (bookingKey) out.add(`dunning|${bookingKey}`);
+      if (bookingKey && stage) out.add(`dunning|${bookingKey}|${stage}`);
+    }
+  }
+
+  return out;
+}
+
+function filterBySelectedIds(items, selectedIds) {
+  if (!selectedIds.size) return items;
+
+  const keys = selectedIdKeys(selectedIds);
+
+  return items.filter((item) => {
+    return docIdKeys(item).some((key) => keys.has(key));
+  });
+}
+
+router.get("/", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const { Customer, Booking } = getModels(req);
+
+    const result = await buildInvoiceList({
+      owner,
+      Customer,
+      Booking,
+      query: req.query,
+    });
+
+    if (!result) throw new Error("buildInvoiceList returned undefined");
+
+    const { items, total, page, limit } = result;
+    return res.json({ ok: true, items, total, page, limit });
+  } catch (err) {
+    console.error("[adminInvoices] GET / error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+async function buildInvoiceList({
+  owner,
+  Customer,
+  Booking,
+  query,
+  hardLimit,
+}) {
   const page = clamp(query.page, 1, 10_000);
-  const limit = clamp(query.limit, 1, 200);
+  const limit = clamp(query.limit, 1, hardLimit ?? 200);
   const skip = (page - 1) * limit;
 
-  const typeStr = String(query.type || '').trim();
+  const typeStr = String(query.type || "").trim();
   const typeSet = new Set(
     typeStr
       ? typeStr
-          .split(',')
+          .split(",")
           .map((s) => s.trim().toLowerCase())
           .filter(Boolean)
-      : ['participation', 'cancellation', 'storno']
+      : ["participation", "cancellation", "storno", "creditnote"],
   );
+  if (typeSet.has("creditnote")) typeSet.add("creditnote");
 
-  const q = String(query.q || '').trim();
+  const q = String(query.q || "").trim();
 
-  // Datum aus Query normalisieren
   const fromStr = normalizeFilterDate(query.from);
-  const toStr   = normalizeFilterDate(query.to);
+  const toStr = normalizeFilterDate(query.to);
 
-  // Inklusive Tagesgrenzen (lokale Suche, unabhängig von Zeitzone)
   const fromDate = fromStr ? new Date(`${fromStr}T00:00:00`) : null;
-  const toDate   = toStr   ? new Date(`${toStr}T23:59:59.999`) : null;
+  const toDate = toStr ? new Date(`${toStr}T23:59:59.999`) : null;
 
   const sort = normalizeSort(query.sort);
+  const selectedIds = parseSelectedIds(query);
 
-  // Minimalfelder laden
   const customers = await Customer.find(
     { owner },
     {
-      'parent.firstName': 1,
-      'parent.lastName': 1,
-      'parent.email': 1,
-      'child.firstName': 1,
-      'child.lastName': 1,
+      userId: 1,
+      "parent.firstName": 1,
+      "parent.lastName": 1,
+      "parent.email": 1,
+      "child.firstName": 1,
+      "child.lastName": 1,
       bookings: 1,
-    }
+    },
   ).lean();
 
-  let all = [];
+  const bookingIds = [];
   for (const c of customers) {
     for (const b of c.bookings || []) {
-      const docs = docsFromBooking(c, b);
-      for (const r of docs) {
-        if (!typeSet.has(r.type)) continue;
+      if (b?.bookingId && mongoose.isValidObjectId(String(b.bookingId))) {
+        bookingIds.push(new Types.ObjectId(String(b.bookingId)));
+      }
+    }
+  }
 
-        // Freitext
+  const bookingStateDocs = bookingIds.length
+    ? await Booking.find(
+        { owner, _id: { $in: bookingIds } },
+        {
+          paymentStatus: 1,
+          paidAt: 1,
+          returnedAt: 1,
+          returnBankFee: 1,
+          returnNote: 1,
+          dunningEvents: 1,
+          collectionStatus: 1,
+          handedOverAt: 1,
+          handedOverNote: 1,
+          meta: 1,
+          stripe: 1,
+          createdAt: 1,
+        },
+      ).lean()
+    : [];
+
+  const bookingStateMap = new Map(
+    bookingStateDocs.map((b) => [String(b._id), b]),
+  );
+
+  const all = [];
+
+  for (const c of customers) {
+    for (const b of c.bookings || []) {
+      const state = bookingStateMap.get(String(b.bookingId || b._id || ""));
+      const docs = docsFromBooking(c, b, state);
+
+      for (const r of docs) {
+        if (!typeSet.has(String(r.type || "").toLowerCase())) continue;
+
         const blob = [
           c.parent?.firstName,
           c.parent?.lastName,
@@ -272,10 +566,13 @@ async function buildInvoiceList({ owner, Customer, query }) {
           r.bookingId,
         ]
           .filter(Boolean)
-          .join(' ');
-        if (!matchesQ(blob, q)) continue;
+          .join(" ");
 
-        // Date-Range (inklusive)
+        const customerNumber = c.userId ?? r.customerNumber ?? "";
+        const docNo = docNoFrom(r);
+
+        if (!matchesInvoiceQuery({ q, customerNumber, docNo, blob })) continue;
+
         if (r.issuedAt && (fromDate || toDate)) {
           const t = new Date(r.issuedAt).getTime();
           if (!Number.isNaN(t)) {
@@ -284,252 +581,922 @@ async function buildInvoiceList({ owner, Customer, query }) {
           }
         }
 
+        const state = bookingStateMap.get(String(r.bookingId || ""));
+
+        if (state) {
+          const events = Array.isArray(state.dunningEvents)
+            ? state.dunningEvents
+            : [];
+
+          const lastEvent = events.length
+            ? [...events].sort((a, b) => {
+                const ta = new Date(a?.sentAt || 0).getTime();
+                const tb = new Date(b?.sentAt || 0).getTime();
+                return tb - ta;
+              })[0]
+            : null;
+
+          const sentStages = [];
+          const docByStage = {};
+          for (const ev of events) {
+            const st = String(ev?.stage || "").trim();
+            if (!st) continue;
+            if (!sentStages.includes(st)) sentStages.push(st);
+            if (!docByStage[st] && ev?.documentId) {
+              docByStage[st] = String(ev.documentId);
+            }
+          }
+
+          const st = String(state.paymentStatus || "").trim();
+          const paidAt = state.paidAt || null;
+
+          r.paidAt = paidAt;
+          r.paymentStatus = st || (paidAt ? "paid" : "open");
+          r.paymentIntentId =
+            String(state?.stripe?.paymentIntentId || "").trim() || null;
+          r.returnedAt = state.returnedAt || null;
+          r.returnBankFee = Number(state.returnBankFee || 0);
+          r.returnNote = state.returnNote || "";
+          r.dunningCount = events.length;
+          r.lastDunningStage = lastEvent?.stage || null;
+          r.lastDunningSentAt = lastEvent?.sentAt || null;
+          r.nextDunningStage =
+            (state.paymentStatus || "open") === "paid"
+              ? null
+              : nextDunningStage(events);
+
+          r.dunningSentStages = sentStages;
+          r.dunningDocIdByStage = docByStage;
+
+          r.collectionStatus = state.collectionStatus || "none";
+          r.handedOverAt = state.handedOverAt || null;
+          r.handedOverNote = state.handedOverNote || "";
+
+          const meta =
+            state.meta && typeof state.meta === "object" ? state.meta : {};
+          r.creditNoteEmailSentAt =
+            String(meta.creditNoteEmailSentAt || "").trim() || null;
+          r.creditNoteDate = String(meta.creditNoteDate || "").trim() || null;
+          r.creditNoteAmount =
+            meta.creditNoteAmount != null
+              ? Number(meta.creditNoteAmount)
+              : null;
+          r.refundId = String(meta.stripeRefundId || "").trim() || null;
+
+          r.stripeMode = String(state?.stripe?.mode || "").trim();
+          r.subscriptionId =
+            String(state?.stripe?.subscriptionId || "").trim() || null;
+          r.paymentIntentId =
+            String(state?.stripe?.paymentIntentId || "").trim() || null;
+
+          r.contractSignedAt =
+            meta.contractSignedAt != null
+              ? String(meta.contractSignedAt)
+              : null;
+          r.createdAt = state?.createdAt ? toISO(state.createdAt) : null;
+        } else {
+          r.paymentStatus = "open";
+          r.dunningCount = 0;
+          r.lastDunningStage = null;
+          r.lastDunningSentAt = null;
+          r.nextDunningStage = "reminder";
+          r.dunningSentStages = [];
+          r.dunningDocIdByStage = {};
+          r.collectionStatus = "none";
+          r.handedOverAt = null;
+          r.handedOverNote = "";
+        }
+
         all.push(r);
       }
     }
   }
 
-  // Sortierung
-  all.sort((a, b) => {
-    const fa = a[sort.field] ?? '';
-    const fb = b[sort.field] ?? '';
+  let filtered = filterBySelectedIds(all, selectedIds);
+
+  filtered.sort((a, b) => {
+    if (sort.field === "issuedAt") {
+      const ta = issuedTime(a.issuedAt);
+      const tb = issuedTime(b.issuedAt);
+
+      if (ta !== tb) return (ta - tb) * sort.dir;
+
+      const dn = docNoCompare(a, b);
+      if (dn !== 0) return dn * sort.dir;
+
+      return String(a.id || "").localeCompare(String(b.id || "")) * sort.dir;
+    }
+
+    const fa = a[sort.field] ?? "";
+    const fb = b[sort.field] ?? "";
     if (fa === fb) return 0;
     return fa > fb ? sort.dir : -sort.dir;
   });
 
-  const total = all.length;
-  const items = all.slice(skip, skip + limit);
+  const total = filtered.length;
+  const items = filtered.slice(skip, skip + limit);
 
   return { items, total, page, limit };
 }
 
-/* =========================================================
-   GET /api/admin/invoices
-========================================================= */
-router.get('/', async (req, res) => {
+router.get("/csv", async (req, res) => {
   try {
     const owner = requireOwner(req, res);
     if (!owner) return;
 
-    const { Customer } = getModels(req);
+    const { Customer, Booking } = getModels(req);
+    const selectedIds = parseSelectedIds(req.query);
 
-    const { items, total, page, limit } = await buildInvoiceList({
+    let items = await buildExportListWithDunning({
       owner,
       Customer,
+      Booking,
       query: req.query,
+      hardLimit: 10000,
+      deps: {
+        buildInvoiceList,
+        BillingDocument,
+        clamp,
+        normalizeFilterDate,
+        normalizeSort,
+        issuedTime,
+        docNoCompare,
+        norm,
+        isDigitsOnly,
+      },
     });
 
-    res.json({ ok: true, items, total, page, limit });
+    items = filterBySelectedIds(items, selectedIds);
+
+    const csv = buildCsvText(items, {
+      env: process.env,
+      docNoFrom,
+    });
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="invoices.csv"');
+    return res.status(200).send(csv);
   } catch (err) {
-    console.error('[adminInvoices] GET / error:', err);
-    res.status(500).json({ ok: false, error: 'Server error' });
+    console.error("[adminInvoices] GET /csv error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 
-/* =========================================================
-   GET /api/admin/invoices/csv
-   -> CSV der *aktuellen* Liste (gleiche Filter wie GET /)
-========================================================= */
-router.get('/csv', async (req, res) => {
+function safeFileNamePart(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .slice(0, 120);
+}
+
+function fileNameBaseFromItem(item) {
+  const docNo = String(docNoFrom(item) || "").trim();
+  return safeFileNamePart(
+    item.fileName ||
+      item.title ||
+      `${item.type}${docNo ? `-${docNo}` : ""}` ||
+      `${item.type}-${item.bookingId || "document"}`,
+  );
+}
+
+function buildPdfUrlForItem(item, origin) {
+  if (item?.exportHref) {
+    return `${origin}${item.exportHref}`;
+  }
+
+  if (item?.href) {
+    return `${origin}${item.href}`;
+  }
+
+  if (!item?.customerId || !item?.bookingId) return "";
+
+  const typeToPdf = (type) =>
+    type === "cancellation"
+      ? "cancellation"
+      : type === "storno"
+        ? "storno"
+        : type === "creditnote"
+          ? "credit-note"
+          : "participation";
+
+  return (
+    `${origin}/api/admin/customers/${encodeURIComponent(
+      item.customerId,
+    )}/bookings/${encodeURIComponent(item.bookingId)}/` +
+    `${typeToPdf(item.type)}.pdf`
+  );
+}
+
+async function appendInvoicePdfToArchive({ archive, item, origin, provider }) {
+  const pdfUrl = buildPdfUrlForItem(item, origin);
+
+  if (!pdfUrl) {
+    throw new Error("missing customerId/bookingId and href");
+  }
+
+  const response = await fetch(pdfUrl, {
+    headers: provider ? { "x-provider-id": provider } : {},
+    redirect: "follow",
+  });
+
+  if (!response.ok) {
+    const msg = `Fetch failed (${response.status}) for ${pdfUrl}`;
+    archive.append(Buffer.from(msg, "utf8"), {
+      name: `error-${item.bookingId || "unknown"}.txt`,
+    });
+    return;
+  }
+
+  const contentType = (
+    response.headers.get("content-type") || ""
+  ).toLowerCase();
+  const buf = Buffer.from(await response.arrayBuffer());
+  const rawName = fileNameBaseFromItem(item);
+  const hasPdfExt = /\.pdf$/i.test(rawName);
+  const ext = contentType.includes("pdf") ? (hasPdfExt ? "" : ".pdf") : ".bin";
+
+  archive.append(buf, { name: `${rawName}${ext}` });
+}
+
+router.get("/zip", async (req, res) => {
   try {
+    const archiver = require("archiver");
+
     const owner = requireOwner(req, res);
     if (!owner) return;
-    const { Customer } = getModels(req);
 
-    // Genau gleiche Liste wie in GET '/'
-    const { items } = await buildInvoiceList({
+    const { Customer, Booking } = getModels(req);
+    const selectedIds = parseSelectedIds(req.query);
+
+    let items = await buildExportListWithDunning({
       owner,
       Customer,
-      query: req.query,
+      Booking,
+      query: { ...req.query, page: 1, limit: 10000 },
+      hardLimit: 10000,
+      deps: {
+        buildInvoiceList,
+        BillingDocument,
+        clamp,
+        normalizeFilterDate,
+        normalizeSort,
+        issuedTime,
+        docNoCompare,
+        norm,
+        isDigitsOnly,
+      },
     });
 
-    const header = [
-      'type',
-      'issuedAt',
-      'title',
-      'offerType',
-      'offerTitle',
-      'amount',
-      'currency',
-      'bookingId',
-      'customerId',
-    ];
+    items = filterBySelectedIds(items, selectedIds);
 
-    const esc = (v) => {
-      if (v == null) return '';
-      const s = String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const fmtDate = (val) => {
-      if (!val) return '';
-      const d = new Date(val);
-      if (Number.isNaN(d.getTime())) return '';
-      return d.toISOString().slice(0, 10);
-    };
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", 'attachment; filename="invoices.zip"');
 
-    const lines = [
-      header.join(','),
-      ...items.map((it) => {
-        const row = {
-          type: it.type || '',
-          issuedAt: fmtDate(it.issuedAt),
-          title: it.title || '',
-          offerType: it.offerType || '',
-          offerTitle: it.offerTitle || '',
-          amount: it.amount != null ? String(it.amount) : '',
-          currency: it.currency || '',
-          bookingId: it.bookingId || '',
-          customerId: it.customerId || '',
-        };
-        return header.map((k) => esc(row[k])).join(',');
-      }),
-    ];
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="invoices.csv"');
-    res.status(200).send(lines.join('\n'));
-  } catch (err) {
-    console.error('[adminInvoices] GET /csv error:', err);
-    res.status(500).json({ ok: false, error: 'Server error' });
-  }
-});
-
-/* =========================================================
-   GET /api/admin/invoices/zip
-   -> ZIP mit PDFs + invoices.csv
-========================================================= */
-router.get('/zip', async (req, res) => {
-  try {
-    const archiver = require('archiver');
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="invoices.zip"' );
-
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.on('error', (err) => {
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("error", (err) => {
       throw err;
     });
     archive.pipe(res);
 
-    const origin   = `${req.protocol}://${req.get('host')}`;
-    const provider = req.get('x-provider-id') || '';
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const provider = req.get("x-provider-id") || "";
 
-    // Query-Params mit großem Limit für ZIP
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(req.query || {})) {
-      if (value == null) continue;
-      params.set(key, String(value));
-    }
-    params.set('page', '1');
-    params.set('limit', '10000');
-    const qs = params.toString();
-
-    const listResp = await fetch(`${origin}/api/admin/invoices?${qs}`, {
-      headers: provider ? { 'x-provider-id': provider } : {},
+    const csv = buildCsvText(items, {
+      env: process.env,
+      docNoFrom,
     });
-    if (!listResp.ok) {
-      throw new Error(`List fetch failed: HTTP ${listResp.status}`);
-    }
-    const listData = await listResp.json();
-    const items = Array.isArray(listData?.items) ? listData.items : [];
 
-    // CSV in ZIP
-    const header = [
-      'type',
-      'issuedAt',
-      'title',
-      'offerType',
-      'offerTitle',
-      'amount',
-      'currency',
-      'bookingId',
-      'customerId',
-    ];
-    const csv = [
-      header.join(','),
-      ...items.map((it) => {
-        const row = {
-          type: it.type || '',
-          issuedAt: it.issuedAt
-            ? new Date(it.issuedAt).toISOString().slice(0, 10)
-            : '',
-          title: it.title || '',
-          offerType: it.offerType || '',
-          offerTitle: it.offerTitle || '',
-          amount: it.amount != null ? String(it.amount) : '',
-          currency: it.currency || '',
-          bookingId: it.bookingId || '',
-          customerId: it.customerId || '',
-        };
-        return header
-          .map((k) => {
-            const v = row[k] == null ? '' : String(row[k]);
-            return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-          })
-          .join(',');
-      }),
-    ].join('\n');
-    archive.append(Buffer.from(csv, 'utf8'), { name: 'invoices.csv' });
+    archive.append(Buffer.from(csv, "utf8"), { name: "invoices.csv" });
 
-    // PDFs in ZIP
-    const typeToPdf = (t) =>
-      t === 'cancellation'
-        ? 'cancellation'
-        : t === 'storno'
-        ? 'storno'
-        : 'participation';
-
-    for (const it of items) {
+    for (const item of items) {
       try {
-        let pdfUrl = '';
-        if (it.customerId && it.bookingId) {
-          pdfUrl =
-            `${origin}/api/admin/customers/${encodeURIComponent(
-              it.customerId
-            )}/bookings/${encodeURIComponent(it.bookingId)}/` +
-            `${typeToPdf(it.type)}.pdf`;
-        } else if (it.href) {
-          pdfUrl = `${origin}${it.href}`;
-        } else {
-          throw new Error('missing customerId/bookingId and href');
-        }
-
-        const r = await fetch(pdfUrl, {
-          headers: provider ? { 'x-provider-id': provider } : {},
-          redirect: 'follow',
+        await appendInvoicePdfToArchive({
+          archive,
+          item,
+          origin,
+          provider,
         });
-
-        if (!r.ok) {
-          const msg = `Fetch failed (${r.status}) for ${pdfUrl}`;
-          archive.append(Buffer.from(msg, 'utf8'), {
-            name: `error-${it.bookingId || 'unknown'}.txt`,
-          });
-          continue;
-        }
-
-        const ct = (r.headers.get('content-type') || '').toLowerCase();
-        const buf = Buffer.from(await r.arrayBuffer());
-
-        const safeTitle = (it.title || `${it.type}-${it.bookingId}` || 'document')
-          .replace(/[\\/:*?"<>|]+/g, '_')
-          .slice(0, 80);
-
-        const ext = ct.includes('pdf') ? '.pdf' : '.bin';
-        archive.append(buf, { name: `${safeTitle}${ext}` });
       } catch (e) {
-        const msg = `Error fetching booking ${it.bookingId}: ${
+        const msg = `Error fetching booking ${item.bookingId}: ${
           (e && e.message) || e
         }`;
-        archive.append(Buffer.from(msg, 'utf8'), {
-          name: `error-${it.bookingId || 'unknown'}.txt`,
+        archive.append(Buffer.from(msg, "utf8"), {
+          name: `error-${item.bookingId || "unknown"}.txt`,
         });
       }
     }
 
     await archive.finalize();
   } catch (err) {
-    console.error('[adminInvoices] GET /zip error:', err);
-    res.status(500).json({ ok: false, error: 'Server error' });
+    console.error("[adminInvoices] GET /zip error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+function parseMoney(v, fallback = 0) {
+  if (v == null || v === "") return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function addDays(date, days) {
+  const base = date instanceof Date ? date : new Date(date);
+  const d = new Date(base);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d;
+}
+
+function dunningStages() {
+  return ["reminder", "dunning1", "dunning2", "final"];
+}
+
+function getLastDunningStage(events) {
+  const list = Array.isArray(events) ? events : [];
+  if (!list.length) return null;
+  const sorted = [...list].sort((a, b) => {
+    const ta = new Date(a?.sentAt || 0).getTime();
+    const tb = new Date(b?.sentAt || 0).getTime();
+    return tb - ta;
+  });
+  return sorted[0]?.stage || null;
+}
+
+function nextDunningStage(events) {
+  const last = getLastDunningStage(events);
+  const stages = dunningStages();
+  if (!last) return "reminder";
+  const idx = stages.indexOf(last);
+  if (idx < 0) return "reminder";
+  return stages[Math.min(idx + 1, stages.length - 1)];
+}
+
+function buildFeeSnapshot(booking, body = {}) {
+  const returnBankFee =
+    parseMoney(body.returnBankFee, null) ??
+    parseMoney(booking?.returnBankFee, 0);
+
+  const dunningFee = parseMoney(body.dunningFee, 0);
+  const processingFee = parseMoney(body.processingFee, 0);
+  const totalExtraFees = returnBankFee + dunningFee + processingFee;
+
+  return {
+    returnBankFee,
+    dunningFee,
+    processingFee,
+    totalExtraFees,
+    currency: "EUR",
+  };
+}
+
+async function findCustomerAndBookingByBookingId({
+  Customer,
+  owner,
+  bookingId,
+}) {
+  const customer = await Customer.findOne(
+    { owner, "bookings.bookingId": bookingId },
+    {
+      userId: 1,
+      parent: 1,
+      child: 1,
+      address: 1,
+      bookings: 1,
+    },
+  );
+
+  if (!customer) return { customer: null, bookingRef: null };
+
+  const bookingRef =
+    (customer.bookings || []).find(
+      (b) => String(b.bookingId || "") === String(bookingId),
+    ) || null;
+
+  return { customer, bookingRef };
+}
+
+async function loadOwnedBooking({ Booking, owner, bookingId }) {
+  return Booking.findOne({ _id: bookingId, owner });
+}
+
+async function findFirstSentDunningDoc({ owner, invoiceNo, stage }) {
+  if (!invoiceNo || !stage) return null;
+  return BillingDocument.findOne({
+    owner: String(owner),
+    kind: "dunning",
+    invoiceNo: String(invoiceNo),
+    stage: String(stage),
+    sentAt: { $ne: null },
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+}
+
+function buildItemSelectionKeys(item) {
+  const type = String(item?.type || "")
+    .trim()
+    .toLowerCase();
+  const id = String(item?.id || "").trim();
+  const bookingId = String(item?.bookingId || "").trim();
+  const docNo = String(docNoFrom(item) || "")
+    .trim()
+    .toLowerCase();
+  const stage = String(item?.stage || item?.lastDunningStage || "")
+    .trim()
+    .toLowerCase();
+  const documentId = String(item?.documentId || "").trim();
+
+  return [
+    id,
+    [type, bookingId].filter(Boolean).join("|"),
+    [type, bookingId, docNo].filter(Boolean).join("|"),
+    [type, bookingId, stage].filter(Boolean).join("|"),
+    [type, bookingId, documentId].filter(Boolean).join("|"),
+  ].filter(Boolean);
+}
+
+function buildSelectedKeySet(selectedIds) {
+  const out = new Set();
+
+  for (const raw of selectedIds) {
+    const id = String(raw || "").trim();
+    if (!id) continue;
+
+    out.add(id);
+
+    if (id.startsWith("inv:")) {
+      out.add(`participation|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("can:")) {
+      out.add(`cancellation|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("sto:")) {
+      out.add(`storno|${id.slice(4)}`);
+    }
+
+    if (id.startsWith("cr:")) {
+      const rest = id.slice(3);
+      const firstColon = rest.indexOf(":");
+
+      if (firstColon >= 0) {
+        const bookingKey = rest.slice(0, firstColon).trim();
+        const creditNo = rest
+          .slice(firstColon + 1)
+          .trim()
+          .toLowerCase();
+
+        out.add(`creditnote|${bookingKey}`);
+        out.add(`creditnote|${bookingKey}|${creditNo}`);
+      }
+    }
+
+    if (id.startsWith("dun:")) {
+      const rest = id.slice(4);
+      const parts = rest.split(":").map((v) => String(v || "").trim());
+      const bookingKey = parts[0] || "";
+      const stage = String(parts[1] || "").toLowerCase();
+
+      if (bookingKey) out.add(`dunning|${bookingKey}`);
+      if (bookingKey && stage) out.add(`dunning|${bookingKey}|${stage}`);
+    }
+  }
+
+  return out;
+}
+
+function filterBySelectedIds(items, selectedIds) {
+  if (!selectedIds.size) return items;
+
+  const selectedKeySet = buildSelectedKeySet(selectedIds);
+
+  return items.filter((item) => {
+    return buildItemSelectionKeys(item).some((key) => selectedKeySet.has(key));
+  });
+}
+
+router.post("/:bookingId/mark-paid", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!mongoose.isValidObjectId(bookingId)) {
+      return res.status(400).json({ ok: false, error: "Invalid bookingId" });
+    }
+
+    const { Booking } = getModels(req);
+    const booking = await loadOwnedBooking({
+      Booking,
+      owner,
+      bookingId: new Types.ObjectId(bookingId),
+    });
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "Booking not found" });
+    }
+
+    booking.paymentStatus = "paid";
+    booking.paidAt = new Date();
+    await booking.save();
+
+    return res.json({
+      ok: true,
+      bookingId: String(booking._id),
+      paymentStatus: booking.paymentStatus,
+      paidAt: booking.paidAt,
+    });
+  } catch (err) {
+    console.error("[adminInvoices] POST /:bookingId/mark-paid error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+router.post("/:bookingId/mark-returned", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!mongoose.isValidObjectId(bookingId)) {
+      return res.status(400).json({ ok: false, error: "Invalid bookingId" });
+    }
+
+    const body = req.body || {};
+    const bankFee = parseMoney(body.bankFee, parseMoney(body.returnBankFee, 0));
+    const returnNote = String(body.returnNote || "").trim();
+
+    const { Booking } = getModels(req);
+    const booking = await loadOwnedBooking({
+      Booking,
+      owner,
+      bookingId: new Types.ObjectId(bookingId),
+    });
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "Booking not found" });
+    }
+
+    booking.paymentStatus = "returned";
+    booking.returnedAt = new Date();
+    booking.returnBankFee = bankFee;
+    booking.returnNote = returnNote;
+    await booking.save();
+
+    return res.json({
+      ok: true,
+      bookingId: String(booking._id),
+      paymentStatus: booking.paymentStatus,
+      returnedAt: booking.returnedAt,
+      returnBankFee: booking.returnBankFee,
+      returnNote: booking.returnNote || "",
+    });
+  } catch (err) {
+    console.error("[adminInvoices] POST /:bookingId/mark-returned error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+router.post("/:bookingId/resend-dunning", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!mongoose.isValidObjectId(bookingId)) {
+      return res.status(400).json({ ok: false, error: "Invalid bookingId" });
+    }
+
+    const body = req.body || {};
+    const requestedStage = String(body.stage || "next").trim();
+
+    const { Customer, Booking } = getModels(req);
+
+    const booking = await loadOwnedBooking({
+      Booking,
+      owner,
+      bookingId: new Types.ObjectId(bookingId),
+    });
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "Booking not found" });
+    }
+
+    if (booking.paymentStatus === "paid") {
+      return res.status(409).json({
+        ok: false,
+        error: "Booking is already paid. Dunning not allowed.",
+      });
+    }
+
+    const { customer } = await findCustomerAndBookingByBookingId({
+      Customer,
+      owner,
+      bookingId: booking._id,
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        ok: false,
+        error: "Customer for booking not found",
+      });
+    }
+
+    const stage =
+      requestedStage === "next"
+        ? nextDunningStage(booking.dunningEvents)
+        : requestedStage;
+
+    if (!dunningStages().includes(stage)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "Invalid dunning stage" });
+    }
+
+    const invNo = String(
+      booking.invoiceNo || booking.invoiceNumber || "",
+    ).trim();
+    const doc = await findFirstSentDunningDoc({
+      owner,
+      invoiceNo: invNo,
+      stage,
+    });
+
+    if (!doc) {
+      return res.status(404).json({
+        ok: false,
+        error: "No existing dunning document for this invoice and stage",
+      });
+    }
+
+    const toEmail = String(
+      body.toEmail || customer?.parent?.email || booking.email || "",
+    ).trim();
+
+    if (!toEmail) {
+      return res.status(400).json({ ok: false, error: "No recipient email" });
+    }
+
+    const freeText = String(body.freeText || "").trim();
+    const dueAt = doc?.dueAt ? new Date(doc.dueAt) : addDays(new Date(), 14);
+    const sentAt = new Date();
+    const subject = String(body.subject || doc?.subject || "").trim();
+
+    const feeSnapshot = doc?.feesSnapshot || {};
+    const { sendDunningEmail } = getMailer();
+
+    await sendDunningEmail({
+      to: toEmail,
+      customer,
+      booking,
+      stage,
+      feeSnapshot,
+      dueAt,
+      freeText,
+      sentAt,
+      subject,
+    });
+
+    return res.json({
+      ok: true,
+      bookingId: String(booking._id),
+      stage,
+      document: {
+        id: String(doc._id),
+        kind: doc.kind,
+        stage: doc.stage,
+        fileName: doc.fileName,
+        filePath: doc.filePath,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "[adminInvoices] POST /:bookingId/resend-dunning error:",
+      err,
+    );
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+router.post("/:bookingId/send-dunning", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!mongoose.isValidObjectId(bookingId)) {
+      return res.status(400).json({ ok: false, error: "Invalid bookingId" });
+    }
+
+    const body = req.body || {};
+    const requestedStage = String(body.stage || "next").trim();
+    const freeText = String(body.freeText || "").trim();
+    const templateVersion = String(
+      body.templateVersion || "invoice-dunning-v1",
+    ).trim();
+
+    const { Customer, Booking } = getModels(req);
+
+    const booking = await loadOwnedBooking({
+      Booking,
+      owner,
+      bookingId: new Types.ObjectId(bookingId),
+    });
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "Booking not found" });
+    }
+
+    if (booking.paymentStatus === "paid") {
+      return res.status(409).json({
+        ok: false,
+        error: "Booking is already paid. Dunning not allowed.",
+      });
+    }
+
+    const { customer } = await findCustomerAndBookingByBookingId({
+      Customer,
+      owner,
+      bookingId: booking._id,
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        ok: false,
+        error: "Customer for booking not found",
+      });
+    }
+
+    const stage =
+      requestedStage === "next"
+        ? nextDunningStage(booking.dunningEvents)
+        : requestedStage;
+
+    if (!dunningStages().includes(stage)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "Invalid dunning stage" });
+    }
+
+    const invNo = String(
+      booking.invoiceNo || booking.invoiceNumber || "",
+    ).trim();
+    const existing = await findFirstSentDunningDoc({
+      owner,
+      invoiceNo: invNo,
+      stage,
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        ok: false,
+        error: "Dunning already exists for this invoice and stage. Use resend.",
+        existingDocumentId: String(existing._id),
+      });
+    }
+
+    const feesSnapshot = buildFeeSnapshot(booking, body);
+    const sentAt = new Date();
+    const dueAt = addDays(sentAt, 14);
+
+    const toEmail = String(
+      body.toEmail || customer?.parent?.email || booking.email || "",
+    ).trim();
+
+    if (!toEmail) {
+      return res.status(400).json({ ok: false, error: "No recipient email" });
+    }
+
+    const { sendDunningEmail } = getMailer();
+    const sentMail = await sendDunningEmail({
+      to: toEmail,
+      customer,
+      booking,
+      stage,
+      feeSnapshot: feesSnapshot,
+      dueAt,
+      freeText,
+      sentAt,
+      subject: body.subject,
+    });
+
+    const subject = String(sentMail?.subject || body.subject || "").trim();
+
+    let archivedDocument = null;
+
+    if (sentMail?.pdfBuffer) {
+      const archiveMeta = archiveDunningPdf({
+        pdfBuffer: sentMail.pdfBuffer,
+        booking,
+        customer,
+        stage,
+        sentAt,
+        dueAt,
+        subject,
+        feeSnapshot: feesSnapshot,
+        owner,
+      });
+
+      archivedDocument = await BillingDocument.create({
+        owner: String(owner),
+        ...archiveMeta,
+      });
+    }
+
+    booking.dunningEvents = Array.isArray(booking.dunningEvents)
+      ? booking.dunningEvents
+      : [];
+
+    booking.dunningEvents.push({
+      stage,
+      sentAt,
+      dueAt,
+      feesSnapshot,
+      toEmail,
+      subject,
+      templateVersion,
+      note: freeText,
+      sentBy: owner,
+      documentId: archivedDocument?._id || null,
+      documentFileName: archivedDocument?.fileName || "",
+      documentFilePath: archivedDocument?.filePath || "",
+    });
+
+    await booking.save();
+
+    return res.json({
+      ok: true,
+      bookingId: String(booking._id),
+      paymentStatus: booking.paymentStatus || "open",
+      dunningEvent: booking.dunningEvents[booking.dunningEvents.length - 1],
+      nextStage:
+        stage === "final" ? "final" : nextDunningStage(booking.dunningEvents),
+      document: archivedDocument
+        ? {
+            id: String(archivedDocument._id),
+            kind: archivedDocument.kind,
+            stage: archivedDocument.stage,
+            fileName: archivedDocument.fileName,
+            filePath: archivedDocument.filePath,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error("[adminInvoices] POST /:bookingId/send-dunning error:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+router.post("/:bookingId/mark-collection", async (req, res) => {
+  try {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!mongoose.isValidObjectId(bookingId)) {
+      return res.status(400).json({ ok: false, error: "Invalid bookingId" });
+    }
+
+    const body = req.body || {};
+    const status = String(body.collectionStatus || "handed_over").trim();
+    const note = String(body.note || body.handedOverNote || "").trim();
+
+    if (!["none", "handed_over", "closed"].includes(status)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "Invalid collectionStatus" });
+    }
+
+    const { Booking } = getModels(req);
+    const booking = await loadOwnedBooking({
+      Booking,
+      owner,
+      bookingId: new Types.ObjectId(bookingId),
+    });
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "Booking not found" });
+    }
+
+    booking.collectionStatus = status;
+    booking.handedOverAt =
+      status === "handed_over" ? new Date() : booking.handedOverAt || null;
+    booking.handedOverNote = note;
+
+    await booking.save();
+
+    return res.json({
+      ok: true,
+      bookingId: String(booking._id),
+      collectionStatus: booking.collectionStatus || "none",
+      handedOverAt: booking.handedOverAt || null,
+      handedOverNote: booking.handedOverNote || "",
+    });
+  } catch (err) {
+    console.error(
+      "[adminInvoices] POST /:bookingId/mark-collection error:",
+      err,
+    );
+    return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 

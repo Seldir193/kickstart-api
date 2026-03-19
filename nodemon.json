@@ -1,0 +1,14 @@
+{
+  "watch": ["app.js", "routes", "middleware", "models", "utils"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "node_modules/**",
+    "uploads/**",
+    "tmp/**",
+    "temp/**",
+    "logs/**",
+    "**/*.pdf",
+    "**/*.zip",
+    "**/*.csv"
+  ]
+}

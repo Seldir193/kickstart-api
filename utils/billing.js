@@ -1,31 +1,77 @@
 // utils/billing.js
-'use strict';
+"use strict";
 
+const {
+  nextSequence,
+  yearFrom,
+  typeCodeFromOffer,
+  formatNumber,
+} = require("../utils/sequences");
 
+function freezeOfferSnapshot(booking, offer) {
+  if (!booking || !offer) return;
 
-const { nextSequence, yearFrom, typeCodeFromOffer, formatNumber } = require('../utils/sequences');
+  if (!booking.offerTitle)
+    booking.offerTitle = offer.title || offer.sub_type || offer.type || "";
+  if (!booking.offerType)
+    booking.offerType = offer.sub_type || offer.type || "";
+  if (!booking.venue) booking.venue = offer.location || "";
+  if (!booking.offer)
+    booking.offer = booking.offerTitle || booking.offerType || "";
+}
 
-/* ---------- intern: Booking sicher speichern (Subdoc oder Model) ---------- */
 async function persistBooking(booking) {
-  // Eigenständiges Mongoose-Doc?
-  if (booking && typeof booking.save === 'function') {
+  if (!booking) return null;
+
+  const isSubdoc =
+    booking.$isSubdocument ||
+    booking.isSubdocument ||
+    typeof booking.ownerDocument === "function";
+
+  if (isSubdoc) {
+    const parent = booking.ownerDocument ? booking.ownerDocument() : null;
+    if (parent && typeof parent.save === "function") {
+      try {
+        parent.markModified(booking?.$basePath || "bookings");
+      } catch (_) {
+        parent.markModified("bookings");
+      }
+      return parent.save();
+    }
+    return null;
+  }
+
+  if (typeof booking.save === "function") {
     return booking.save();
   }
-  // Eingebettetes Subdoc → über Parent speichern
-  const parent = booking && typeof booking.ownerDocument === 'function' ? booking.ownerDocument() : null;
-  if (parent && typeof parent.save === 'function') {
-    // Pfad markieren (bei Arrays z.B. "bookings")
-    // Notfalls grob "bookings" markieren – reicht i.d.R. aus.
-    try {
-      parent.markModified(booking?.$basePath || 'bookings');
-    } catch (_) {
-      parent.markModified('bookings');
-    }
-    return parent.save();
-  }
-  // Fallback: nichts zu tun
+
   return null;
 }
+
+// /* ---------- intern: Booking sicher speichern (Subdoc oder Model) ---------- */
+// async function persistBooking(booking) {
+//   // Eigenständiges Mongoose-Doc?
+//   if (booking && typeof booking.save === "function") {
+//     return booking.save();
+//   }
+//   // Eingebettetes Subdoc → über Parent speichern
+//   const parent =
+//     booking && typeof booking.ownerDocument === "function"
+//       ? booking.ownerDocument()
+//       : null;
+//   if (parent && typeof parent.save === "function") {
+//     // Pfad markieren (bei Arrays z.B. "bookings")
+//     // Notfalls grob "bookings" markieren – reicht i.d.R. aus.
+//     try {
+//       parent.markModified(booking?.$basePath || "bookings");
+//     } catch (_) {
+//       parent.markModified("bookings");
+//     }
+//     return parent.save();
+//   }
+//   // Fallback: nichts zu tun
+//   return null;
+// }
 
 /* ---------- Hilfsfunktionen ---------- */
 function parseISODate(iso) {
@@ -36,8 +82,17 @@ function parseISODate(iso) {
 
 function prorateForStart(startISO, monthlyPrice) {
   const d = parseISODate(startISO);
-  if (!d || typeof monthlyPrice !== 'number' || !Number.isFinite(monthlyPrice)) {
-    return { daysInMonth: null, daysRemaining: null, factor: null, firstMonthPrice: null };
+  if (
+    !d ||
+    typeof monthlyPrice !== "number" ||
+    !Number.isFinite(monthlyPrice)
+  ) {
+    return {
+      daysInMonth: null,
+      daysRemaining: null,
+      factor: null,
+      firstMonthPrice: null,
+    };
   }
   const y = d.getFullYear();
   const m = d.getMonth();
@@ -56,7 +111,7 @@ function nextPeriodStart(startISO) {
   const m = d.getMonth();
   const firstNext = new Date(y, m + 1, 1);
   const y2 = firstNext.getFullYear();
-  const m2 = String(firstNext.getMonth() + 1).padStart(2, '0');
+  const m2 = String(firstNext.getMonth() + 1).padStart(2, "0");
   return `${y2}-${m2}-01`;
 }
 
@@ -65,25 +120,49 @@ function fmtAmount(n) {
 }
 
 function normCurrency(c) {
-  return String(c || 'EUR').toUpperCase();
+  return String(c || "EUR").toUpperCase();
 }
 
+// /* ---------- Nummern-/Daten-Zuweisung ---------- */
+// async function assignInvoiceData({ booking, offer, providerId = "1" }) {
+//   //const code =
+//   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+//   const code = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
+//   const year = yearFrom();
+//   const seq = await nextSequence(`invoice:${code}:${year}`);
 
+//   booking.invoiceNumber = formatNumber(providerId, code, year, seq);
+//   booking.invoiceDate = new Date();
 
+//   // Monatsbetrag „einfrieren“
+//   if (
+//     booking.priceAtBooking == null &&
+//     offer &&
+//     typeof offer.price === "number"
+//   ) {
+//     booking.priceAtBooking = offer.price;
+//   }
 
-/* ---------- Nummern-/Daten-Zuweisung ---------- */
-async function assignInvoiceData({ booking, offer, providerId = '1' }) {
-  //const code =
-   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
-    const code = (offer && (offer.code || typeCodeFromOffer(offer))) || 'XX';
+//   await persistBooking(booking);
+
+//   return booking;
+// }
+
+async function assignInvoiceData({ booking, offer, providerId = "1" }) {
+  const code = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
   const year = yearFrom();
-  const seq  = await nextSequence(`invoice:${code}:${year}`);
+  const seq = await nextSequence(`invoice:${code}:${year}`);
 
   booking.invoiceNumber = formatNumber(providerId, code, year, seq);
-  booking.invoiceDate   = new Date();
+  booking.invoiceDate = new Date();
 
-  // Monatsbetrag „einfrieren“
-  if (booking.priceAtBooking == null && offer && typeof offer.price === 'number') {
+  freezeOfferSnapshot(booking, offer);
+
+  if (
+    booking.priceAtBooking == null &&
+    offer &&
+    typeof offer.price === "number"
+  ) {
     booking.priceAtBooking = offer.price;
   }
 
@@ -91,24 +170,23 @@ async function assignInvoiceData({ booking, offer, providerId = '1' }) {
   return booking;
 }
 
-
 async function assignCancellationData({
   booking,
-  providerId = '1',
+  providerId = "1",
   cancellationDate = new Date(),
   endDate,
 }) {
-  const code = 'K';
+  const code = "K";
   const year = yearFrom();
-  const seq  = await nextSequence(`cancellation:${code}:${year}`);
+  const seq = await nextSequence(`cancellation:${code}:${year}`);
 
   // Einheitliche Feldnamen: zusätzlich cancellationNo setzen (für Templates)
   booking.cancellationNumber = formatNumber(providerId, code, year, seq);
-  booking.cancellationNo     = booking.cancellationNumber;
+  booking.cancellationNo = booking.cancellationNumber;
 
   if (!booking.cancellationDate) booking.cancellationDate = cancellationDate;
 
-  if (!booking.cancelDate)       booking.cancelDate       = booking.cancellationDate; // vereinheitlicht
+  if (!booking.cancelDate) booking.cancelDate = booking.cancellationDate; // vereinheitlicht
   if (endDate && !booking.endDate) booking.endDate = endDate;
 
   await persistBooking(booking);
@@ -119,33 +197,107 @@ async function assignStornoData({
   booking,
   offer,
   amount,
-  providerId = '1',
+  providerId = "1",
   stornoDate = new Date(),
 }) {
-//  const code =
-   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
-    const code = (offer && (offer.code || typeCodeFromOffer(offer))) || 'XX';
+  //  const code =
+  // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
+  const code = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
   const year = yearFrom();
-  const seq  = await nextSequence(`storno:${code}:${year}`);
+  const seq = await nextSequence(`storno:${code}:${year}`);
 
   // Einheitliche Feldnamen: zusätzlich stornoNo setzen (für Templates)
   booking.stornoNumber = formatNumber(providerId, code, year, seq);
-  booking.stornoNo     = booking.stornoNumber;
-  booking.stornoDate   = stornoDate;
+  booking.stornoNo = booking.stornoNumber;
+  booking.stornoDate = stornoDate;
 
   // Betrag ermitteln
   let eff;
-  if (amount !== undefined && amount !== null && String(amount).trim() !== '') {
+  if (amount !== undefined && amount !== null && String(amount).trim() !== "") {
     const n = Number(amount);
     if (Number.isFinite(n)) eff = n;
   }
-  if (eff === undefined && typeof booking.priceAtBooking === 'number') eff = booking.priceAtBooking;
-  if (eff === undefined && offer && typeof offer.price === 'number')   eff = offer.price;
+  if (eff === undefined && typeof booking.priceAtBooking === "number")
+    eff = booking.priceAtBooking;
+  if (eff === undefined && offer && typeof offer.price === "number")
+    eff = offer.price;
   if (eff !== undefined) booking.stornoAmount = Math.round(eff * 100) / 100;
 
   await persistBooking(booking);
   return booking;
 }
+
+async function assignCreditNoteData({
+  booking,
+  offer,
+  amount,
+  providerId = "1",
+  creditDate = new Date(),
+}) {
+  const baseCode = "CLB";
+  const creditCode = `GS${baseCode}`;
+  const year = yearFrom();
+  const seq = await nextSequence(`creditnote:${creditCode}:${year}`);
+
+  const meta =
+    booking.meta && typeof booking.meta === "object" ? booking.meta : {};
+  booking.meta = meta;
+
+  freezeOfferSnapshot(booking, offer);
+
+  meta.creditNoteNo = `${creditCode}/${year}/${seq}`;
+  meta.creditNoteDate = creditDate.toISOString();
+
+  const raw = amount != null ? Number(amount) : NaN;
+  const eff = Number.isFinite(raw)
+    ? raw
+    : typeof booking.priceAtBooking === "number"
+      ? booking.priceAtBooking
+      : offer && typeof offer.price === "number"
+        ? offer.price
+        : undefined;
+
+  if (eff !== undefined) meta.creditNoteAmount = Math.round(eff * 100) / 100;
+
+  await persistBooking(booking);
+  return booking;
+}
+
+// async function assignCreditNoteData({
+//   booking,
+//   offer,
+//   amount,
+//   providerId = "1",
+//   creditDate = new Date(),
+// }) {
+//   const baseCode = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
+//   const creditCode = `GS${String(baseCode).toUpperCase()}`;
+//   const year = yearFrom();
+//   const seq = await nextSequence(`creditnote:${creditCode}:${year}`);
+
+//   const meta =
+//     booking.meta && typeof booking.meta === "object" ? booking.meta : {};
+//   booking.meta = meta;
+
+//   freezeOfferSnapshot(booking, offer);
+
+//   meta.creditNoteNo = formatNumber(providerId, creditCode, year, seq);
+//   meta.creditNoteDate = creditDate.toISOString();
+
+//   const raw = amount != null ? Number(amount) : NaN;
+//   const eff = Number.isFinite(raw)
+//     ? raw
+//     : typeof booking.priceAtBooking === "number"
+//       ? booking.priceAtBooking
+//       : offer && typeof offer.price === "number"
+//         ? offer.price
+//         : undefined;
+
+//   if (eff !== undefined) meta.creditNoteAmount = Math.round(eff * 100) / 100;
+
+//   await persistBooking(booking);
+//   return booking;
+// }
 
 /* ---------- Exports ---------- */
 module.exports = {
@@ -156,16 +308,5 @@ module.exports = {
   assignInvoiceData,
   assignCancellationData,
   assignStornoData,
+  assignCreditNoteData,
 };
-
-
-
-
-
-
-
-
-
-
-
-

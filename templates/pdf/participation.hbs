@@ -1,83 +1,151 @@
-<!doctype html>
 <html lang="de">
+
 <head>
   <meta charset="utf-8" />
-  <title>Teilnahmebestätigung und Rechnung – {{brand.company}}</title>
+  <title>
+    {{#if flags.isCreditNote}}Gutschrift{{else}}Teilnahmebestätigung und Rechnung{{/if}}
+    – {{brand.company}}
+  </title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
 </head>
+
 <body>
-<main class="doc">
+  <main class="doc">
 
-  <!-- Kopfband -->
-  <div class="topband">
-    <span class="claim">{{brand.company}}</span>
-    <span class="right"></span>
-    {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
-  </div>
+    <!-- Kopfband -->
+    <div class="topband">
+      <span class="claim">{{brand.company}}</span>
+      <span class="right"></span>
+      {{#if brand.logoUrl}}
+      <img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}" />
+      {{/if}}
+    </div>
 
-  <!-- Empfängeradresse -->
-  <div class="addr">
-    {{#if customer.parent.salutation}}<span class="line">{{customer.parent.salutation}}</span>{{/if}}
-    <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
+    <!-- Empfängeradresse -->
+    <div class="addr">
+      {{#if customer.parent.salutation}}
+      <span class="line">{{customer.parent.salutation}}</span>
+      {{/if}}
 
-    {{#if customer.address.street}}
+      <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
+
+      {{#if customer.address.street}}
       <span class="line">
         {{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}
       </span>
-    {{/if}}
+      {{/if}}
 
-    {{#if customer.address.zip}}
+      {{#if customer.address.zip}}
       <span class="line">
         {{customer.address.zip}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}
       </span>
-    {{/if}}
-  </div>
+      {{/if}}
+    </div>
 
-  <!-- Titel + Einleitung -->
-  <h1 class="subject">Teilnahmebestätigung und Rechnung</h1>
-  <p>Wir bedanken uns für Ihre Buchung und bestätigen die Teilnahme von <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong> an unserem Angebot.</p>
+    <!-- Titel + Einleitung -->
+    <h1 class="subject">
+      {{#if flags.isCreditNote}}Gutschrift{{else}}Teilnahmebestätigung und Rechnung{{/if}}
+    </h1>
 
-  <!-- Rechnungsdaten -->
-  <div class="section-title">Rechnungsdaten</div>
-  <div class="facts">
-    {{#if invoice.date}}   <div class="row"><span class="k">Rechnungsdatum:</span><span class="v">{{fmtDate invoice.date}}</span></div>{{/if}}
-    {{#if invoice.number}} <div class="row"><span class="k">Rechnungsnr.:</span><span class="v">{{invoice.number}}</span></div>{{/if}}
-    {{#if customer.userId}}<div class="row"><span class="k">Kunden-Nr.:</span><span class="v">{{customer.userId}}</span></div>{{/if}}
-  </div>
-
-  <div class="sep-line"></div>
-
-  <!-- POSITIONSBLOCK -->
-  <table class="items" role="presentation">
-    <!-- Kopf: Kursname + (nur bei Weeklies) Zeitfenster -->
-    <tr>
-      <td class="desc muted small">
-        {{#if booking.offer}}{{booking.offer}}{{/if}}
-        {{#if flags.isWeekly}}
-          {{#if booking.dayTimes}}
-            | Jeweils {{booking.dayTimes}}{{#if booking.timeDisplay}} von {{booking.timeDisplay}}{{/if}}
-          {{/if}}
+    {{#if flags.isCreditNote}}
+    <p>
+      Wir bestätigen die Rückerstattung zu Ihrer Buchung. Die Gutschrift wird wie ausgewiesen erstattet.
+    </p>
+    {{else}}
+    <p>
+      Wir bedanken uns für Ihre Buchung und bestätigen die Teilnahme von
+      <strong>
+        {{#if booking.childFull}}
+        {{booking.childFull}}
+        {{else}}
+        {{#if booking.childName}}
+        {{booking.childName}}
+        {{else}}
+        {{#if booking.childFirstName}}
+        {{booking.childFirstName}} {{booking.childLastName}}
+        {{else}}
+        {{#if booking.firstName}}
+        {{booking.firstName}} {{booking.lastName}}
+        {{else}}
+        {{booking.child}}
         {{/if}}
-      </td>
-      <td class="amt"></td>
-    </tr>
+        {{/if}}
+        {{/if}}
+        {{/if}}
+      </strong>
+      an unserem Angebot.
+    </p>
+    {{/if}}
 
-    {{#if flags.isWeekly}}
+    <!-- Rechnungsdaten / Gutschriftsdaten -->
+    <div class="section-title">
+      {{#if flags.isCreditNote}}Gutschriftsdaten{{else}}Rechnungsdaten{{/if}}
+    </div>
+
+    <div class="facts">
+      {{#if invoice.date}}
+      <div class="row">
+        <span class="k">
+          {{#if flags.isCreditNote}}Gutschriftsdatum:{{else}}Rechnungsdatum:{{/if}}
+        </span>
+        <span class="v">{{fmtDate invoice.date}}</span>
+      </div>
+      {{/if}}
+
+      {{#if invoice.number}}
+      <div class="row">
+        <span class="k">
+          {{#if flags.isCreditNote}}Gutschriftsnr.:{{else}}Rechnungsnr.:{{/if}}
+        </span>
+        <span class="v">{{invoice.number}}</span>
+      </div>
+      {{/if}}
+
+      {{#if customer.userId}}
+      <div class="row">
+        <span class="k">Kunden-Nr.:</span>
+        <span class="v">{{customer.userId}}</span>
+      </div>
+      {{/if}}
+    </div>
+
+    <div class="sep-line"></div>
+
+    <!-- POSITIONSBLOCK -->
+    <table class="items" role="presentation">
+      <!-- Kopf: Kursname + (nur bei Weeklies) Zeitfenster -->
+      <tr>
+        <td class="desc muted small">
+          {{#if booking.offer}}{{booking.offer}}{{/if}}
+          {{#if flags.isWeekly}}
+          {{#if booking.dayTimes}}
+          | Jeweils {{booking.dayTimes}}{{#if booking.timeDisplay}} von {{booking.timeDisplay}}{{/if}}
+          {{/if}}
+          {{/if}}
+        </td>
+        <td class="amt"></td>
+      </tr>
+
+      {{#if flags.isWeekly}}
       <!-- WEEKLY: Zeile 1: erster Monat -->
       <tr>
         <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt).</td>
         <td class="amt">
           {{#if invoice.firstMonth}}
-            {{fmtMoney invoice.firstMonth invoice.currency}}
+          {{fmtMoney invoice.firstMonth invoice.currency}}
           {{else if invoice.firstMonthAmount}}
-            {{fmtMoney invoice.firstMonthAmount invoice.currency}}
+          {{fmtMoney invoice.firstMonthAmount invoice.currency}}
           {{else if pricing.firstMonth}}
-            {{fmtMoney pricing.firstMonth pricing.currency}}
+          {{fmtMoney pricing.firstMonth pricing.currency}}
           {{else}}
-            {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
-            {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
-            {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+          {{#if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if invoice.monthlyAmount}}
+          {{fmtMoney invoice.monthlyAmount invoice.currency}}
+          {{else}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
           {{/if}}
         </td>
       </tr>
@@ -86,189 +154,341 @@
       <tr>
         <td class="desc"><strong>Die regelmäßige monatliche Teilnahmegebühr beträgt</strong></td>
         <td class="amt">
-          {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
-          {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
-          {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
+          {{#if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if invoice.monthlyAmount}}
+          {{fmtMoney invoice.monthlyAmount invoice.currency}}
+          {{else}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
         </td>
       </tr>
 
-    {{else}}
-      {{!-- NON-WEEKLY (Holiday / Personal / Club) --}}
-      {{#if booking.discount}}
-
-        {{!-- Optionaler Einleitungssatz zum Rabattblock --}}
-        <tr>
-          <td class="desc muted small">
-            Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
-          </td>
-          <td class="amt"></td>
-        </tr>
-
-        {{!-- Regulärer Preis --}}
-        <tr>
-          <td class="desc">Reguläre Teilnahmegebühr (ohne Rabatte)</td>
-          <td class="amt">
-            {{#if booking.discount.basePrice}}
-              {{fmtMoney booking.discount.basePrice invoice.currency}}
-            {{else if invoice.single}}
-              {{fmtMoney invoice.single invoice.currency}}
-            {{else if pricing.single}}
-              {{fmtMoney pricing.single pricing.currency}}
-            {{else if invoice.monthly}}
-              {{fmtMoney invoice.monthly invoice.currency}}
-            {{else if pricing.monthly}}
-              {{fmtMoney pricing.monthly pricing.currency}}
-            {{/if}}
-          </td>
-        </tr>
-
-        {{!-- Geschwisterrabatt (falls > 0) --}}
-        {{#if booking.discount.siblingDiscount}}
-          <tr>
-            <td class="desc">Geschwisterrabatt</td>
-            <td class="amt">− {{fmtMoney booking.discount.siblingDiscount invoice.currency}}</td>
-          </tr>
-        {{/if}}
-
-        {{!-- Mitgliederrabatt (falls > 0) --}}
-        {{#if booking.discount.memberDiscount}}
-          <tr>
-            <td class="desc">Mitgliederrabatt (Teilnahme am laufenden Kurs)</td>
-            <td class="amt">− {{fmtMoney booking.discount.memberDiscount invoice.currency}}</td>
-          </tr>
-        {{/if}}
-
-        {{!-- Gesamtrabatt, nur wenn gesetzt --}}
-        {{#if booking.discount.totalDiscount}}
-          <tr>
-            <td class="desc"><strong>Summe aller Rabatte</strong></td>
-            <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
-          </tr>
-        {{/if}}
-
-        {{!-- Endpreis nach Rabatt --}}
-        <tr>
-          <td class="desc"><strong>Endgültige Teilnahmegebühr nach Rabatt</strong></td>
-          <td class="amt">
-            {{#if booking.discount.finalPrice}}
-              {{fmtMoney booking.discount.finalPrice invoice.currency}}
-            {{else}}
-              {{#if invoice.single}}
-                {{fmtMoney invoice.single invoice.currency}}
-              {{else if pricing.single}}
-                {{fmtMoney pricing.single pricing.currency}}
-              {{else if invoice.monthly}}
-                {{fmtMoney invoice.monthly invoice.currency}}
-              {{else if pricing.monthly}}
-                {{fmtMoney pricing.monthly pricing.currency}}
-              {{/if}}
-            {{/if}}
-          </td>
-        </tr>
-
       {{else}}
-        <!-- NON-WEEKLY ohne Rabatt: eine einzige Zeile (altes Verhalten) -->
-        <tr>
-          <td class="desc"><strong>Die Teilnahmegebühr beträgt</strong></td>
-          <td class="amt">
-            {{#if invoice.single}}
-              {{fmtMoney invoice.single invoice.currency}}
-            {{else if pricing.single}}
-              {{fmtMoney pricing.single pricing.currency}}
-            {{else if invoice.monthly}}
-              {{fmtMoney invoice.monthly invoice.currency}}
-            {{else if pricing.monthly}}
-              {{fmtMoney pricing.monthly pricing.currency}}
-            {{/if}}
-          </td>
-        </tr>
-      {{/if}}
-    {{/if}}
-  </table>
+      {{! NON-WEEKLY (Holiday / Personal / Club) }}
 
-  <div class="sep-line"></div>
-
-  <!-- Gesamt rechts -->
-  <div class="total-line">
-    <span class="label">Gesamt:</span>
-    <span class="value">
-      {{#if flags.isWeekly}}
-        {{#if invoice.monthly}}{{fmtMoney invoice.monthly invoice.currency}}
-        {{else if invoice.monthlyAmount}}{{fmtMoney invoice.monthlyAmount invoice.currency}}
-        {{else}}{{fmtMoney pricing.monthly pricing.currency}}{{/if}}
-      {{else}}
-        {{!-- Für Holiday/Camp: wenn Rabatt vorhanden, Endpreis anzeigen --}}
-        {{#if booking.discount.finalPrice}}
-          {{fmtMoney booking.discount.finalPrice invoice.currency}}
-        {{else}}
+      {{#if flags.isCreditNote}}
+      <tr>
+        <td class="desc"><strong>Gutschrift / Rückerstattung</strong></td>
+        <td class="amt">
           {{#if invoice.single}}
-            {{fmtMoney invoice.single invoice.currency}}
+          {{fmtMoney invoice.single invoice.currency}}
           {{else if pricing.single}}
-            {{fmtMoney pricing.single pricing.currency}}
-          {{else if invoice.monthly}}
-            {{fmtMoney invoice.monthly invoice.currency}}
-          {{else if pricing.monthly}}
-            {{fmtMoney pricing.monthly pricing.currency}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else}}
+          {{fmtMoney booking.priceAtBooking invoice.currency}}
           {{/if}}
-        {{/if}}
+        </td>
+      </tr>
+
+      {{else if booking.discount}}
+
+
+      <tr>
+        <td class="desc muted small">
+          Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
+        </td>
+        <td class="amt"></td>
+      </tr>
+
+      <tr>
+        <td class="desc">Reguläre Teilnahmegebühr</td>
+        <td class="amt">
+          {{#if booking.discount.basePrice}}
+          {{fmtMoney booking.discount.basePrice invoice.currency}}
+          {{else if booking.discount.grossPrice}}
+          {{fmtMoney booking.discount.grossPrice invoice.currency}}
+          {{else if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+        </td>
+      </tr>
+
+      {{#if booking.discount.mainGoalkeeperSurcharge}}
+      <tr>
+        <td class="desc">Torwart-Zuschlag Hauptkind</td>
+        <td class="amt">+ {{fmtMoney booking.discount.mainGoalkeeperSurcharge invoice.currency}}</td>
+      </tr>
       {{/if}}
-    </span>
-  </div>
 
-  <div class="sep-line"></div>
+      {{#if booking.discount.siblingGoalkeeperSurcharge}}
+      <tr>
+        <td class="desc">Torwart-Zuschlag Geschwisterkind</td>
+        <td class="amt">+ {{fmtMoney booking.discount.siblingGoalkeeperSurcharge invoice.currency}}</td>
+      </tr>
+      {{/if}}
 
-  <!-- Teilnahme -->
-  <div class="section-title">Teilnahme</div>
-  <div class="facts">
-    {{#if booking.date}}<div class="row"><span class="k">Beginn der Teilnahme:</span><span class="v">{{fmtDate booking.date}}</span></div>{{/if}}
-    <div class="row">
-      <span class="k">Veranstaltungsort:</span>
-      <span class="v">
-        {{#if booking.venue}}{{booking.venue}}<br/>{{/if}}
-        {{#if booking.venueAddress}}{{booking.venueAddress}}{{/if}}
-        {{#unless booking.venueAddress}}
-          {{#if booking.venueStreet}}{{booking.venueStreet}}{{/if}}{{#if booking.venueStreet}}{{#if booking.venueZip}}, {{/if}}{{/if}}
-          {{#if booking.venueZip}}{{booking.venueZip}}{{/if}} {{#if booking.venueCity}}{{booking.venueCity}}{{/if}}
-        {{/unless}}
+      {{#if booking.discount.goalkeeperTotal}}
+      <tr>
+        <td class="desc"><strong>Zwischensumme vor Rabatten</strong></td>
+        <td class="amt">
+          {{#if booking.discount.grossPrice}}
+          {{fmtMoney booking.discount.grossPrice invoice.currency}}
+          {{else}}
+          {{fmtMoney booking.discount.basePrice invoice.currency}}
+          {{/if}}
+        </td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.mainMemberDiscount}}
+      <tr>
+        <td class="desc">Mitgliederrabatt Hauptkind</td>
+        <td class="amt">− {{fmtMoney booking.discount.mainMemberDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.siblingMemberDiscount}}
+      <tr>
+        <td class="desc">Mitgliederrabatt Geschwisterkind</td>
+        <td class="amt">− {{fmtMoney booking.discount.siblingMemberDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.siblingDiscount}}
+      <tr>
+        <td class="desc">Geschwisterrabatt</td>
+        <td class="amt">− {{fmtMoney booking.discount.siblingDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.voucherDiscount}}
+      <tr>
+        <td class="desc">
+          Gutschein{{#if booking.discount.voucherCode}} ({{booking.discount.voucherCode}}){{/if}}
+        </td>
+        <td class="amt">− {{fmtMoney booking.discount.voucherDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.totalDiscount}}
+      <tr>
+        <td class="desc"><strong>Summe aller Abzüge</strong></td>
+        <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      <tr>
+        <td class="desc"><strong>Endgültige Teilnahmegebühr</strong></td>
+        <td class="amt">
+          {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+          {{else}}
+          {{#if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+          {{/if}}
+        </td>
+      </tr>
+
+      {{!-- <tr>
+        <td class="desc muted small">
+          Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
+        </td>
+        <td class="amt"></td>
+      </tr>
+
+      <tr>
+        <td class="desc">Reguläre Teilnahmegebühr (ohne Rabatte)</td>
+        <td class="amt">
+          {{#if booking.discount.basePrice}}
+          {{fmtMoney booking.discount.basePrice invoice.currency}}
+          {{else if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+        </td>
+      </tr>
+
+      {{#if booking.discount.siblingDiscount}}
+      <tr>
+        <td class="desc">Geschwisterrabatt</td>
+        <td class="amt">− {{fmtMoney booking.discount.siblingDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.memberDiscount}}
+      <tr>
+        <td class="desc">Mitgliederrabatt (Teilnahme am laufenden Kurs)</td>
+        <td class="amt">− {{fmtMoney booking.discount.memberDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.totalDiscount}}
+      <tr>
+        <td class="desc"><strong>Summe aller Rabatte</strong></td>
+        <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      <tr>
+        <td class="desc"><strong>Endgültige Teilnahmegebühr nach Rabatt</strong></td>
+        <td class="amt">
+          {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+          {{else}}
+          {{#if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+          {{/if}}
+        </td>
+      </tr> --}}
+
+      {{else}}
+      <tr>
+        <td class="desc">
+          <strong>{{#if flags.isCreditNote}}Gutschriftbetrag{{else}}Die Teilnahmegebühr beträgt{{/if}}</strong>
+        </td>
+        <td class="amt">
+          {{#if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if pricing.monthly}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+        </td>
+      </tr>
+      {{/if}}
+      {{/if}}
+    </table>
+
+    <div class="sep-line"></div>
+
+    <!-- Gesamt rechts -->
+    <div class="total-line">
+      <span class="label">Gesamt:</span>
+      <span class="value">
+        {{#if flags.isWeekly}}
+        {{#if invoice.monthly}}
+        {{fmtMoney invoice.monthly invoice.currency}}
+        {{else if invoice.monthlyAmount}}
+        {{fmtMoney invoice.monthlyAmount invoice.currency}}
+        {{else}}
+        {{fmtMoney pricing.monthly pricing.currency}}
+        {{/if}}
+        {{else}}
+        {{#if booking.discount.finalPrice}}
+        {{fmtMoney booking.discount.finalPrice invoice.currency}}
+        {{else}}
+        {{#if invoice.single}}
+        {{fmtMoney invoice.single invoice.currency}}
+        {{else if pricing.single}}
+        {{fmtMoney pricing.single pricing.currency}}
+        {{else if invoice.monthly}}
+        {{fmtMoney invoice.monthly invoice.currency}}
+        {{else if pricing.monthly}}
+        {{fmtMoney pricing.monthly pricing.currency}}
+        {{else}}
+        {{fmtMoney booking.priceAtBooking invoice.currency}}
+        {{/if}}
+        {{/if}}
+        {{/if}}
       </span>
     </div>
-    {{#if booking.endDate}}<div class="row"><span class="k">Ende der Teilnahme:</span><span class="v">{{fmtDate booking.endDate}}</span></div>{{/if}}
-  </div>
 
-  <!-- Zahlung & Hinweise -->
-  <div class="section-title">Zahlung & Hinweise</div>
-  <div class="notes">
-    <p>Bitte nehmen Sie keine Überweisung vor.</p>
-    <p>Die Teilnahmegebühr wird von dem von Ihnen genannten Konto abgebucht.</p>
-    <p>Kein Ausweis der MwSt., da Umsatzsteuerbefreiung gem. § 19 UStG. vorliegt.</p>
-  </div>
+    <div class="sep-line"></div>
 
-  <!-- Footer -->
-  <div class="footer-spacer"></div>
-  <footer class="footer">
-    <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
-      <tr>
-        <td class="footer-col brand">
-          <strong>Münchner Fussball Schule NRW</strong><br/>
-          Hochfelder Straße 33<br/>
-          47226 Duisburg<br/>
-          Deutschland
-        </td>
-        <td class="footer-col meta">
-          <span class="k">Inhaber:</span> <span class="v">Selcuk Kocyigit</span><br/>
-          <span class="k">Tel.:</span> <span class="v">0176-43203362</span><br/>
-          <a href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br/>
-          <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
-        </td>
-        <td class="footer-col bank">
-          <span class="k">Bank:</span> <span class="v">Commerzbank</span><br/>
-          <span class="k">IBAN:</span> <span class="v nowrap">DE13350400380595090200</span><br/>
-          <span class="k">BIC:</span> <span class="v nowrap">COBADEFFXXX</span>
-        </td>
-      </tr>
-    </table>
-  </footer>
+    {{#unless flags.isCreditNote}}
+    <!-- Teilnahme -->
+    <div class="section-title">Teilnahme</div>
+    <div class="facts">
+      {{#if booking.date}}
+      <div class="row">
+        <span class="k">Beginn der Teilnahme:</span>
+        <span class="v">{{fmtDate booking.date}}</span>
+      </div>
+      {{/if}}
 
-</main>
+      <div class="row">
+        <span class="k">Veranstaltungsort:</span>
+        <span class="v">
+          {{#if booking.venue}}{{booking.venue}}<br />{{/if}}
+          {{#if booking.venueAddress}}{{booking.venueAddress}}{{/if}}
+          {{#unless booking.venueAddress}}
+          {{#if booking.venueStreet}}{{booking.venueStreet}}{{/if}}{{#if booking.venueStreet}}{{#if booking.venueZip}},
+          {{/if}}{{/if}}
+          {{#if booking.venueZip}}{{booking.venueZip}}{{/if}}
+          {{#if booking.venueCity}}{{booking.venueCity}}{{/if}}
+          {{/unless}}
+        </span>
+      </div>
+
+      {{#if booking.endDate}}
+      <div class="row">
+        <span class="k">Ende der Teilnahme:</span>
+        <span class="v">{{fmtDate booking.endDate}}</span>
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- Zahlung & Hinweise -->
+    <div class="section-title">Zahlung & Hinweise</div>
+    <div class="notes">
+      <p>Bitte nehmen Sie keine Überweisung vor.</p>
+      <p>Die Teilnahmegebühr wird von dem von Ihnen genannten Konto abgebucht.</p>
+      <p>Kein Ausweis der MwSt., da Umsatzsteuerbefreiung gem. § 19 UStG. vorliegt.</p>
+    </div>
+    {{/unless}}
+
+    <!-- Footer -->
+    <div class="footer-spacer"></div>
+    <footer class="footer">
+      <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
+        <tr>
+          <td class="footer-col brand">
+            <strong>Münchner Fussball Schule NRW</strong><br />
+            Hochfelder Straße 33<br />
+            47226 Duisburg<br />
+            Deutschland
+          </td>
+          <td class="footer-col meta">
+            <span class="k">Inhaber:</span>
+            <span class="v">Selcuk Kocyigit</span><br />
+            <span class="k">Tel.:</span>
+            <span class="v">0176-43203362</span><br />
+            <a
+              href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br />
+            <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
+          </td>
+          <td class="footer-col bank">
+            <span class="k">Bank:</span>
+            <span class="v">Commerzbank</span><br />
+            <span class="k">IBAN:</span>
+            <span class="v nowrap">DE13350400380595090200</span><br />
+            <span class="k">BIC:</span>
+            <span class="v nowrap">COBADEFFXXX</span>
+          </td>
+        </tr>
+      </table>
+    </footer>
+
+  </main>
 </body>
+
 </html>

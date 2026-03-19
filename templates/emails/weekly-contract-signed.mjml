@@ -1,0 +1,51 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-text font-size="14px" line-height="1.6" color="#111827" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f5f7fb">
+    <mj-section padding="18px 0">
+      <mj-column>
+        <mj-image
+          padding="0 0 12px 0"
+          align="left"
+          width="180px"
+          src="{{brand.logoUrl}}"
+          alt="Logo"
+        />
+        <mj-text font-size="20px" font-weight="800" color="#0f1e2e">
+          {{ title }}
+        </mj-text>
+
+        <mj-text>
+          Hallo {{ greetingName }},
+          <br />
+          {{ intro }}
+        </mj-text>
+
+        <mj-divider border-color="#e5e7eb" />
+
+        <mj-text font-weight="700" color="#0f1e2e">Details</mj-text>
+        <mj-text>
+          <strong>Programm:</strong> {{ booking.program }}<br />
+          <strong>Start:</strong> {{ booking.date }}<br />
+          {{#if booking.code}}<strong>Referenz:</strong> {{ booking.code
+          }}<br />{{/if}} {{#if booking.signedAt
+          }}<strong>Unterschrieben am:</strong> {{ booking.signedAt }}{{/if}}
+        </mj-text>
+
+        <mj-divider border-color="#e5e7eb" />
+
+        <mj-text color="#6b7280" font-size="12px">
+          {{ signature.signoff }}<br />
+          {{ signature.name }}<br /><br />
+          {{ brand.company }} · {{ brand.addr1 }} · {{ brand.addr2 }} ·
+          {{ brand.email }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
