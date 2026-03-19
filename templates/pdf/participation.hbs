@@ -181,7 +181,11 @@
         </td>
       </tr>
 
+
+
       {{else if booking.discount}}
+
+
 
 
       <tr>
@@ -267,6 +271,8 @@
       </tr>
       {{/if}}
 
+
+
       {{#if booking.discount.totalDiscount}}
       <tr>
         <td class="desc"><strong>Summe aller Abzüge</strong></td>
@@ -293,69 +299,7 @@
         </td>
       </tr>
 
-      {{!-- <tr>
-        <td class="desc muted small">
-          Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
-        </td>
-        <td class="amt"></td>
-      </tr>
 
-      <tr>
-        <td class="desc">Reguläre Teilnahmegebühr (ohne Rabatte)</td>
-        <td class="amt">
-          {{#if booking.discount.basePrice}}
-          {{fmtMoney booking.discount.basePrice invoice.currency}}
-          {{else if invoice.single}}
-          {{fmtMoney invoice.single invoice.currency}}
-          {{else if pricing.single}}
-          {{fmtMoney pricing.single pricing.currency}}
-          {{else if invoice.monthly}}
-          {{fmtMoney invoice.monthly invoice.currency}}
-          {{else if pricing.monthly}}
-          {{fmtMoney pricing.monthly pricing.currency}}
-          {{/if}}
-        </td>
-      </tr>
-
-      {{#if booking.discount.siblingDiscount}}
-      <tr>
-        <td class="desc">Geschwisterrabatt</td>
-        <td class="amt">− {{fmtMoney booking.discount.siblingDiscount invoice.currency}}</td>
-      </tr>
-      {{/if}}
-
-      {{#if booking.discount.memberDiscount}}
-      <tr>
-        <td class="desc">Mitgliederrabatt (Teilnahme am laufenden Kurs)</td>
-        <td class="amt">− {{fmtMoney booking.discount.memberDiscount invoice.currency}}</td>
-      </tr>
-      {{/if}}
-
-      {{#if booking.discount.totalDiscount}}
-      <tr>
-        <td class="desc"><strong>Summe aller Rabatte</strong></td>
-        <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
-      </tr>
-      {{/if}}
-
-      <tr>
-        <td class="desc"><strong>Endgültige Teilnahmegebühr nach Rabatt</strong></td>
-        <td class="amt">
-          {{#if booking.discount.finalPrice}}
-          {{fmtMoney booking.discount.finalPrice invoice.currency}}
-          {{else}}
-          {{#if invoice.single}}
-          {{fmtMoney invoice.single invoice.currency}}
-          {{else if pricing.single}}
-          {{fmtMoney pricing.single pricing.currency}}
-          {{else if invoice.monthly}}
-          {{fmtMoney invoice.monthly invoice.currency}}
-          {{else if pricing.monthly}}
-          {{fmtMoney pricing.monthly pricing.currency}}
-          {{/if}}
-          {{/if}}
-        </td>
-      </tr> --}}
 
       {{else}}
       <tr>

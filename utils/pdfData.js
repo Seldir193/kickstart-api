@@ -306,42 +306,6 @@ function shapeParticipationData({ customer, booking, offer }) {
     booking?.uhrzeit ||
     "";
 
-  // const meta = booking && booking.meta ? booking.meta : {};
-
-  // const siblingDiscount =
-  //   meta && meta.siblingDiscount != null
-  //     ? Number(meta.siblingDiscount) || 0
-  //     : 0;
-
-  // const memberDiscount =
-  //   meta && meta.memberDiscount != null ? Number(meta.memberDiscount) || 0 : 0;
-
-  // const metaTotal =
-  //   meta && meta.totalDiscount != null ? Number(meta.totalDiscount) || 0 : 0;
-
-  // const totalDiscount = metaTotal || siblingDiscount + memberDiscount;
-
-  // const finalPrice =
-  //   booking?.priceAtBooking != null &&
-  //   Number.isFinite(Number(booking.priceAtBooking))
-  //     ? Number(booking.priceAtBooking)
-  //     : null;
-
-  // const basePrice =
-  //   meta.basePrice != null && Number.isFinite(Number(meta.basePrice))
-  //     ? Number(meta.basePrice)
-  //     : finalPrice != null
-  //       ? finalPrice + Number(totalDiscount || 0)
-  //       : null;
-
-  // const discount = {
-  //   basePrice,
-  //   siblingDiscount,
-  //   memberDiscount,
-  //   totalDiscount,
-  //   finalPrice,
-  // };
-
   const meta = booking && booking.meta ? booking.meta : {};
 
   const basePrice = toNum(meta.basePrice);

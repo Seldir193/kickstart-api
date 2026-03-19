@@ -97,16 +97,90 @@ async function bookingPdfBuffer(booking) {
   return htmlRenderer.bookingPdfBufferHTML(booking);
 }
 
+// function computeIsWeekly(offer) {
+//   if (!offer) return false;
+//   if (String(offer.category || "") === "Weekly") return true;
+
+//   const t = String(offer.type || "");
+//   if (t === "Foerdertraining" || t === "Kindergarten") return true;
+
+//   const sub = String(offer.sub_type || "").toLowerCase();
+//   if (sub === "powertraining") return false;
+//   if (t === "PersonalTraining") return false;
+
+//   return false;
+// }
+
+// function computeIsWeekly(offer) {
+//   if (!offer) return false;
+
+//   const category = String(offer.category || "").trim();
+//   const type = String(offer.type || "").trim();
+//   const subType = String(offer.sub_type || "")
+//     .trim()
+//     .toLowerCase();
+//   const title = String(offer.title || "")
+//     .trim()
+//     .toLowerCase();
+
+//   const isExplicitNonWeekly =
+//     category === "RentACoach" ||
+//     category === "ClubPrograms" ||
+//     category === "Individual" ||
+//     category === "Holiday" ||
+//     category === "HolidayPrograms" ||
+//     subType.startsWith("rentacoach") ||
+//     subType.includes("coacheducation") ||
+//     subType.includes("trainingcamp") ||
+//     subType.includes("trainingscamp") ||
+//     subType.includes("powertraining") ||
+//     subType.startsWith("clubprogram") ||
+//     type === "PersonalTraining" ||
+//     title.includes("rentacoach") ||
+//     title.includes("coacheducation") ||
+//     title.includes("powertraining");
+
+//   if (isExplicitNonWeekly) return false;
+
+//   if (category === "Weekly") return true;
+//   if (type === "Foerdertraining" || type === "Kindergarten") return true;
+
+//   return false;
+// }
+
 function computeIsWeekly(offer) {
   if (!offer) return false;
-  if (String(offer.category || "") === "Weekly") return true;
 
-  const t = String(offer.type || "");
-  if (t === "Foerdertraining" || t === "Kindergarten") return true;
+  const category = String(offer.category || "").trim();
+  const type = String(offer.type || "").trim();
+  const subType = String(offer.sub_type || "")
+    .trim()
+    .toLowerCase();
+  const title = String(offer.title || "")
+    .trim()
+    .toLowerCase();
 
-  const sub = String(offer.sub_type || "").toLowerCase();
-  if (sub === "powertraining") return false;
-  if (t === "PersonalTraining") return false;
+  const isExplicitNonWeekly =
+    category === "RentACoach" ||
+    category === "ClubPrograms" ||
+    category === "Individual" ||
+    category === "Holiday" ||
+    category === "HolidayPrograms" ||
+    subType.startsWith("rentacoach") ||
+    subType.includes("coacheducation") ||
+    subType.includes("trainingcamp") ||
+    subType.includes("trainingscamp") ||
+    subType.includes("powertraining") ||
+    subType.startsWith("clubprogram") ||
+    type === "PersonalTraining" ||
+    type === "CoachEducation" ||
+    title.includes("rentacoach") ||
+    title.includes("coacheducation") ||
+    title.includes("powertraining");
+
+  if (isExplicitNonWeekly) return false;
+  if (category === "Weekly") return true;
+  if (type === "Foerdertraining" || type === "Kindergarten") return true;
 
   return false;
 }
@@ -258,36 +332,6 @@ async function buildParticipationPdf({
     const meta =
       booking && typeof booking.meta === "object" ? booking.meta : {};
 
-    // const siblingDiscount = toNum(meta.siblingDiscount) ?? 0;
-    // const memberDiscount = toNum(meta.memberDiscount) ?? 0;
-
-    // const totalDiscount =
-    //   meta.totalDiscount != null
-    //     ? (toNum(meta.totalDiscount) ?? 0)
-    //     : siblingDiscount + memberDiscount;
-
-    // const finalPrice =
-    //   toNum(booking?.priceAtBooking) ??
-    //   toNum(shaped.booking.priceAtBooking) ??
-    //   toNumNonZero(shaped.invoice.single) ??
-    //   toNumNonZero(shaped.invoice.oneOff) ??
-    //   toNumNonZero(shaped.pricing.single) ??
-    //   toNum(offer?.price);
-
-    // const basePrice =
-    //   toNum(meta.basePrice) ??
-    //   (finalPrice != null
-    //     ? finalPrice + Number(totalDiscount || 0)
-    //     : undefined);
-
-    // shaped.booking.discount = {
-    //   basePrice: basePrice ?? null,
-    //   siblingDiscount,
-    //   memberDiscount,
-    //   totalDiscount,
-    //   finalPrice: finalPrice ?? basePrice ?? null,
-    // };
-
     const basePrice = toNum(meta.basePrice);
     const grossPrice = toNum(meta.grossPrice);
 
@@ -350,14 +394,12 @@ async function buildParticipationPdf({
   shaped.booking.isWeekly = isWeekly;
   shaped.isWeekly = isWeekly;
 
-  // console.log("[PDF DEBUG] isWeekly:", isWeekly);
-  // console.log("[PDF DEBUG] booking.id:", shaped.booking._id || booking?._id);
-  // console.log(
-  //   "[PDF DEBUG] booking.priceAtBooking:",
-  //   booking && booking.priceAtBooking,
-  // );
-  // console.log("[PDF DEBUG] shaped.invoice:", shaped.invoice);
-  // console.log("[PDF DEBUG] shaped.pricing:", shaped.pricing);
+  console.log("[PDF DEBUG shaped.booking.discount]", {
+    offerTitle: shaped?.booking?.offerTitle,
+    offer: shaped?.booking?.offer,
+    priceAtBooking: shaped?.booking?.priceAtBooking,
+    discount: shaped?.booking?.discount || null,
+  });
 
   return htmlRenderer.buildParticipationPdfHTML({
     customer: shaped.customer,

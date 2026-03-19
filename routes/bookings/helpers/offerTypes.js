@@ -1,3 +1,4 @@
+//routes\bookings\helpers\offerTypes.js
 "use strict";
 
 function detectSiblingFlag(body = {}) {

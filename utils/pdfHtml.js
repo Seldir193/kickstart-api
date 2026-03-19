@@ -206,6 +206,11 @@ function compileTemplate(baseName, data) {
   const filePath = resolveHbsPath(baseName);
   let html = filePath ? safeRead(filePath) : null;
 
+  console.log("[PDF TEMPLATE PATH]", {
+    baseName,
+    filePath,
+  });
+
   if (!html) {
     html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>PDF</title></head>
 <body style="font-family:Arial,Helvetica,sans-serif;color:#111827;margin:24px">
@@ -480,43 +485,121 @@ async function buildParticipationPdfHTML({
       const meta =
         booking?.meta && typeof booking.meta === "object" ? booking.meta : {};
 
+      const basePrice =
+        typeof meta.basePrice === "number" ? Number(meta.basePrice) : undefined;
+
+      const grossPrice =
+        typeof meta.grossPrice === "number"
+          ? Number(meta.grossPrice)
+          : basePrice;
+
+      const mainGoalkeeperSurcharge = Number(meta.mainGoalkeeperSurcharge || 0);
+      const siblingGoalkeeperSurcharge = Number(
+        meta.siblingGoalkeeperSurcharge || 0,
+      );
+
+      const goalkeeperTotal =
+        meta.goalkeeperTotal != null
+          ? Number(meta.goalkeeperTotal)
+          : mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
+
       const siblingDiscount = Number(meta.siblingDiscount || 0);
-      const memberDiscount = Number(meta.memberDiscount || 0);
+      const mainMemberDiscount = Number(meta.mainMemberDiscount || 0);
+      const siblingMemberDiscount = Number(meta.siblingMemberDiscount || 0);
+
+      const memberDiscount =
+        meta.memberDiscount != null
+          ? Number(meta.memberDiscount)
+          : mainMemberDiscount + siblingMemberDiscount;
+
+      const voucherDiscount = Number(meta.voucherDiscount || 0);
+
       const totalDiscount =
         meta.totalDiscount != null
           ? Number(meta.totalDiscount)
-          : siblingDiscount + memberDiscount;
+          : siblingDiscount + memberDiscount + voucherDiscount;
 
       const finalPrice =
         typeof booking.priceAtBooking === "number"
           ? Number(booking.priceAtBooking)
-          : undefined;
-
-      const lastRefBase =
-        Array.isArray(booking.invoiceRefs) && booking.invoiceRefs.length
-          ? booking.invoiceRefs[booking.invoiceRefs.length - 1]?.basePrice
-          : undefined;
-
-      const basePrice =
-        typeof meta.basePrice === "number"
-          ? Number(meta.basePrice)
-          : typeof effInvoice.basePrice === "number"
-            ? Number(effInvoice.basePrice)
-            : typeof lastRefBase === "number"
-              ? Number(lastRefBase)
-              : finalPrice != null && Number.isFinite(totalDiscount)
-                ? Number(finalPrice) + Number(totalDiscount)
-                : undefined;
+          : grossPrice != null
+            ? Number(grossPrice) - Number(totalDiscount)
+            : undefined;
 
       discount = {
         basePrice,
+        grossPrice,
+        mainGoalkeeperSurcharge,
+        siblingGoalkeeperSurcharge,
+        goalkeeperTotal,
         siblingDiscount,
+        mainMemberDiscount,
+        siblingMemberDiscount,
         memberDiscount,
+        voucherCode: String(meta.voucherCode || meta.voucher || "").trim(),
+        voucherDiscount,
         totalDiscount,
         finalPrice,
       };
     }
+    if (discount) {
+      discount.voucherCode = String(discount.voucherCode || "").trim();
+      discount.voucherDiscount = Number(discount.voucherDiscount || 0);
+      discount.hasVoucher = Boolean(
+        discount.voucherCode || discount.voucherDiscount > 0,
+      );
+      discount.voucherLabel = discount.voucherCode
+        ? `Gutschein (${discount.voucherCode})`
+        : "Gutschein";
+    }
   }
+
+  // let discount = null;
+
+  // if (!weekly && booking) {
+  //   if (booking.discount) {
+  //     discount = { ...booking.discount };
+  //   } else {
+  //     const meta =
+  //       booking?.meta && typeof booking.meta === "object" ? booking.meta : {};
+
+  //     const siblingDiscount = Number(meta.siblingDiscount || 0);
+  //     const memberDiscount = Number(meta.memberDiscount || 0);
+  //     const totalDiscount =
+  //       meta.totalDiscount != null
+  //         ? Number(meta.totalDiscount)
+  //         : siblingDiscount + memberDiscount;
+
+  //     const finalPrice =
+  //       typeof booking.priceAtBooking === "number"
+  //         ? Number(booking.priceAtBooking)
+  //         : undefined;
+
+  //     const lastRefBase =
+  //       Array.isArray(booking.invoiceRefs) && booking.invoiceRefs.length
+  //         ? booking.invoiceRefs[booking.invoiceRefs.length - 1]?.basePrice
+  //         : undefined;
+
+  //     const basePrice =
+  //       typeof meta.basePrice === "number"
+  //         ? Number(meta.basePrice)
+  //         : typeof effInvoice.basePrice === "number"
+  //           ? Number(effInvoice.basePrice)
+  //           : typeof lastRefBase === "number"
+  //             ? Number(lastRefBase)
+  //             : finalPrice != null && Number.isFinite(totalDiscount)
+  //               ? Number(finalPrice) + Number(totalDiscount)
+  //               : undefined;
+
+  //     discount = {
+  //       basePrice,
+  //       siblingDiscount,
+  //       memberDiscount,
+  //       totalDiscount,
+  //       finalPrice,
+  //     };
+  //   }
+  // }
 
   let effectiveSingle;
   if (!weekly) {
@@ -585,6 +668,13 @@ async function buildParticipationPdfHTML({
     isCreditNote: byNo || byNegative,
   };
 
+  console.log("[PDF DEBUG bookingCtx.discount]", {
+    offerTitle: bookingCtx?.offerTitle,
+    offer: bookingCtx?.offer,
+    priceAtBooking: bookingCtx?.priceAtBooking,
+    discount: bookingCtx?.discount || null,
+  });
+
   const html = compileTemplate("participation", {
     brand,
     flags,
@@ -598,6 +688,24 @@ async function buildParticipationPdfHTML({
     pricing: effPricing,
     invoice: effInvoice,
   });
+
+  console.log("[PDF HTML DEBUG voucher]", {
+    hasVoucherWord: html.includes("Gutschein"),
+    hasVoucherCode: html.includes(
+      String(bookingCtx?.discount?.voucherCode || ""),
+    ),
+    hasVoucherAmount: html.includes(
+      String(bookingCtx?.discount?.voucherDiscount || ""),
+    ),
+  });
+
+  const voucherIndex = html.indexOf("Gutschein");
+  console.log(
+    "[PDF HTML DEBUG snippet]",
+    voucherIndex >= 0
+      ? html.slice(Math.max(0, voucherIndex - 250), voucherIndex + 400)
+      : "NO_GUTSCHEIN_IN_HTML",
+  );
 
   return renderPdf(html);
 }

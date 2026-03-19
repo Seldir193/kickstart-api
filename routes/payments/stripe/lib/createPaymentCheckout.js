@@ -52,6 +52,9 @@ async function createPaymentCheckout({ booking }) {
     cancel_url: cancelUrl(),
     customer_email: safeStr(booking.email).toLowerCase() || undefined,
     payment_method_types: ["card", "sepa_debit"],
+    invoice_creation: {
+      enabled: true,
+    },
     metadata: metaForBooking(booking),
     line_items: [
       {
