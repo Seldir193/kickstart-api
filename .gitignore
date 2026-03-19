@@ -6,3 +6,5 @@ dist/
 # Env
 .env
 .env.local
+
+uploads/
