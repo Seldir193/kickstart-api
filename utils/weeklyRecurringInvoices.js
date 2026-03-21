@@ -578,19 +578,19 @@ async function createWeeklyRecurringInvoiceForBooking({
   booking,
   stripeInvoice,
 }) {
-  console.log("[weeklyRecurringInvoice] enter", {
-    bookingId: String(booking?._id || ""),
-    ownerId,
-    hasOffer: !!offer,
-    hasBooking: !!booking,
-    hasStripeInvoice: !!stripeInvoice,
-    stripeInvoiceId: safeText(stripeInvoice?.id),
-    subscription: safeText(stripeInvoice?.subscription),
-    billingReason: safeText(stripeInvoice?.billing_reason),
-    offerCategory: safeText(offer?.category),
-    offerType: safeText(offer?.type),
-    bookingOfferType: safeText(booking?.offerType),
-  });
+  // console.log("[weeklyRecurringInvoice] enter", {
+  //   bookingId: String(booking?._id || ""),
+  //   ownerId,
+  //   hasOffer: !!offer,
+  //   hasBooking: !!booking,
+  //   hasStripeInvoice: !!stripeInvoice,
+  //   stripeInvoiceId: safeText(stripeInvoice?.id),
+  //   subscription: safeText(stripeInvoice?.subscription),
+  //   billingReason: safeText(stripeInvoice?.billing_reason),
+  //   offerCategory: safeText(offer?.category),
+  //   offerType: safeText(offer?.type),
+  //   bookingOfferType: safeText(booking?.offerType),
+  // });
 
   if (!ownerId || !offer || !booking || !stripeInvoice) {
     console.log("[weeklyRecurringInvoice] skip: missing input");
