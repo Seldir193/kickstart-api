@@ -13,7 +13,6 @@
 <body>
   <main class="doc">
 
-    <!-- Kopfband -->
     <div class="topband">
       <span class="claim">{{brand.company}}</span>
       <span class="right"></span>
@@ -22,7 +21,6 @@
       {{/if}}
     </div>
 
-    <!-- Empfängeradresse -->
     <div class="addr">
       {{#if customer.parent.salutation}}
       <span class="line">{{customer.parent.salutation}}</span>
@@ -43,7 +41,6 @@
       {{/if}}
     </div>
 
-    <!-- Titel + Einleitung -->
     <h1 class="subject">
       {{#if flags.isCreditNote}}Gutschrift{{else}}Teilnahmebestätigung und Rechnung{{/if}}
     </h1>
@@ -78,7 +75,6 @@
     </p>
     {{/if}}
 
-    <!-- Rechnungsdaten / Gutschriftsdaten -->
     <div class="section-title">
       {{#if flags.isCreditNote}}Gutschriftsdaten{{else}}Rechnungsdaten{{/if}}
     </div>
@@ -112,9 +108,7 @@
 
     <div class="sep-line"></div>
 
-    <!-- POSITIONSBLOCK -->
     <table class="items" role="presentation">
-      <!-- Kopf: Kursname + (nur bei Weeklies) Zeitfenster -->
       <tr>
         <td class="desc muted small">
           {{#if booking.offer}}{{booking.offer}}{{/if}}
@@ -128,9 +122,21 @@
       </tr>
 
       {{#if flags.isWeekly}}
-      <!-- WEEKLY: Zeile 1: erster Monat -->
       <tr>
-        <td class="desc">Für den ersten Monat beträgt die Teilnahmegebühr (inkl. 0,00&nbsp;EUR MwSt).</td>
+        <td class="desc">Regelmäßige monatliche Teilnahmegebühr</td>
+        <td class="amt">
+          {{#if invoice.monthly}}
+          {{fmtMoney invoice.monthly invoice.currency}}
+          {{else if invoice.monthlyAmount}}
+          {{fmtMoney invoice.monthlyAmount invoice.currency}}
+          {{else}}
+          {{fmtMoney pricing.monthly pricing.currency}}
+          {{/if}}
+        </td>
+      </tr>
+
+      <tr>
+        <td class="desc">Erster Monat / erste Abbuchung</td>
         <td class="amt">
           {{#if invoice.firstMonth}}
           {{fmtMoney invoice.firstMonth invoice.currency}}
@@ -150,28 +156,49 @@
         </td>
       </tr>
 
-      <!-- WEEKLY: Zeile 2: Monatsgebühr -->
+      {{#if booking.discount}}
+      {{#if booking.discount.voucherDiscount}}
       <tr>
-        <td class="desc"><strong>Die regelmäßige monatliche Teilnahmegebühr beträgt</strong></td>
+        <td class="desc">
+          Gutschein{{#if booking.discount.voucherCode}} ({{booking.discount.voucherCode}}){{/if}}
+        </td>
+        <td class="amt">− {{fmtMoney booking.discount.voucherDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      {{#if booking.discount.totalDiscount}}
+      <tr>
+        <td class="desc"><strong>Summe aller Abzüge</strong></td>
+        <td class="amt">− {{fmtMoney booking.discount.totalDiscount invoice.currency}}</td>
+      </tr>
+      {{/if}}
+
+      <tr>
+        <td class="desc"><strong>Tatsächlich berechneter erster Monat</strong></td>
         <td class="amt">
-          {{#if invoice.monthly}}
-          {{fmtMoney invoice.monthly invoice.currency}}
-          {{else if invoice.monthlyAmount}}
-          {{fmtMoney invoice.monthlyAmount invoice.currency}}
+          {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+          {{else if invoice.firstMonth}}
+          {{fmtMoney invoice.firstMonth invoice.currency}}
+          {{else if invoice.firstMonthAmount}}
+          {{fmtMoney invoice.firstMonthAmount invoice.currency}}
+          {{else if pricing.firstMonth}}
+          {{fmtMoney pricing.firstMonth pricing.currency}}
           {{else}}
-          {{fmtMoney pricing.monthly pricing.currency}}
+          {{fmtMoney booking.priceAtBooking invoice.currency}}
           {{/if}}
         </td>
       </tr>
+      {{/if}}
 
       {{else}}
-      {{! NON-WEEKLY (Holiday / Personal / Club) }}
-
       {{#if flags.isCreditNote}}
       <tr>
         <td class="desc"><strong>Gutschrift / Rückerstattung</strong></td>
         <td class="amt">
-          {{#if invoice.single}}
+          {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+          {{else if invoice.single}}
           {{fmtMoney invoice.single invoice.currency}}
           {{else if pricing.single}}
           {{fmtMoney pricing.single pricing.currency}}
@@ -181,13 +208,24 @@
         </td>
       </tr>
 
-
+      {{#if booking.discount}}
+      {{#if booking.discount.voucherDiscount}}
+      <tr>
+        <td class="desc muted small">
+          Hinweis: Die ursprüngliche Rechnung wurde
+          {{#if booking.discount.voucherCode}}
+          unter Berücksichtigung des Gutscheins ({{booking.discount.voucherCode}})
+          {{else}}
+          unter Berücksichtigung eines Gutscheins
+          {{/if}}
+          erstellt.
+        </td>
+        <td class="amt"></td>
+      </tr>
+      {{/if}}
+      {{/if}}
 
       {{else if booking.discount}}
-
-
-
-
       <tr>
         <td class="desc muted small">
           Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
@@ -271,8 +309,6 @@
       </tr>
       {{/if}}
 
-
-
       {{#if booking.discount.totalDiscount}}
       <tr>
         <td class="desc"><strong>Summe aller Abzüge</strong></td>
@@ -299,8 +335,6 @@
         </td>
       </tr>
 
-
-
       {{else}}
       <tr>
         <td class="desc">
@@ -324,12 +358,21 @@
 
     <div class="sep-line"></div>
 
-    <!-- Gesamt rechts -->
     <div class="total-line">
       <span class="label">Gesamt:</span>
       <span class="value">
         {{#if flags.isWeekly}}
-        {{#if invoice.monthly}}
+        {{#if booking.discount.finalPrice}}
+        {{fmtMoney booking.discount.finalPrice invoice.currency}}
+        {{else if invoice.firstMonth}}
+        {{fmtMoney invoice.firstMonth invoice.currency}}
+        {{else if invoice.firstMonthAmount}}
+        {{fmtMoney invoice.firstMonthAmount invoice.currency}}
+        {{else if pricing.firstMonth}}
+        {{fmtMoney pricing.firstMonth pricing.currency}}
+        {{else if booking.priceAtBooking}}
+        {{fmtMoney booking.priceAtBooking invoice.currency}}
+        {{else if invoice.monthly}}
         {{fmtMoney invoice.monthly invoice.currency}}
         {{else if invoice.monthlyAmount}}
         {{fmtMoney invoice.monthlyAmount invoice.currency}}
@@ -359,7 +402,6 @@
     <div class="sep-line"></div>
 
     {{#unless flags.isCreditNote}}
-    <!-- Teilnahme -->
     <div class="section-title">Teilnahme</div>
     <div class="facts">
       {{#if booking.date}}
@@ -391,7 +433,6 @@
       {{/if}}
     </div>
 
-    <!-- Zahlung & Hinweise -->
     <div class="section-title">Zahlung & Hinweise</div>
     <div class="notes">
       <p>Bitte nehmen Sie keine Überweisung vor.</p>
@@ -400,7 +441,6 @@
     </div>
     {{/unless}}
 
-    <!-- Footer -->
     <div class="footer-spacer"></div>
     <footer class="footer">
       <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
