@@ -122,15 +122,52 @@ function ensureMeta(booking) {
   return booking.meta;
 }
 
+// function resolveCreditAmount(booking, offer, meta) {
+//   const eff =
+//     typeof meta.creditNoteAmount === "number"
+//       ? Number(meta.creditNoteAmount)
+//       : typeof booking.priceAtBooking === "number"
+//         ? Number(booking.priceAtBooking)
+//         : typeof offer?.price === "number"
+//           ? Number(offer.price)
+//           : 0;
+
+//   return {
+//     abs: Math.abs(eff),
+//     neg: -Math.abs(eff),
+//     absForMail: Math.abs(eff),
+//   };
+// }
+
 function resolveCreditAmount(booking, offer, meta) {
+  const grossPrice =
+    typeof meta.grossPrice === "number"
+      ? Number(meta.grossPrice)
+      : typeof meta.basePrice === "number"
+        ? Number(meta.basePrice)
+        : typeof offer?.price === "number"
+          ? Number(offer.price)
+          : 0;
+
+  const voucherDiscount =
+    typeof meta.voucherDiscount === "number" ? Number(meta.voucherDiscount) : 0;
+
+  const totalDiscount =
+    typeof meta.totalDiscount === "number"
+      ? Number(meta.totalDiscount)
+      : voucherDiscount;
+
+  const discountedFinalPrice =
+    typeof meta.finalPrice === "number"
+      ? Number(meta.finalPrice)
+      : grossPrice - totalDiscount;
+
   const eff =
     typeof meta.creditNoteAmount === "number"
       ? Number(meta.creditNoteAmount)
       : typeof booking.priceAtBooking === "number"
         ? Number(booking.priceAtBooking)
-        : typeof offer?.price === "number"
-          ? Number(offer.price)
-          : 0;
+        : discountedFinalPrice;
 
   return {
     abs: Math.abs(eff),
@@ -222,34 +259,6 @@ async function createCreditNoteForBooking({
     pdfBuffer,
     reason: meta.creditNoteReason,
   });
-
-  // const to = pickFirst(
-  //   customer?.parent?.email,
-  //   customer?.email,
-  //   booking?.invoiceTo?.parent?.email,
-  //   booking?.email,
-  // ).toLowerCase();
-
-  // const pdfBuffer = await buildParticipationPdf({
-  //   customer,
-  //   booking: bookingForPdf,
-  //   offer,
-  //   invoiceNo: creditNo,
-  //   invoiceDate: creditDate.toISOString(),
-  //   venue: booking?.venue || offer?.location || "",
-  // });
-
-  // await sendCreditNoteEmail({
-  //   to,
-  //   customer,
-  //   booking,
-  //   offer,
-  //   creditNo,
-  //   creditDate,
-  //   amount: absForMail,
-  //   pdfBuffer,
-  //   reason: meta.creditNoteReason,
-  // });
 
   meta.creditNoteEmailSentAt = new Date().toISOString();
   booking.markModified("meta");
