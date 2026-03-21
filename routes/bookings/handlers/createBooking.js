@@ -703,30 +703,30 @@ async function findBlockingClubProgramDuplicate({ offer, first, last, email }) {
   const offerIds = docs.map((doc) => String(doc.offerId || "")).filter(Boolean);
   const offerMap = await loadOfferMap(offerIds);
 
-  console.log("DEBUG duplicate search", {
-    owner: String(offer.owner),
-    first,
-    last,
-    email,
-    courseKey,
-  });
-  console.log(
-    "DEBUG duplicate docs",
-    docs.map((doc) => {
-      const docOffer = offerMap.get(String(doc.offerId || ""));
-      return {
-        id: String(doc._id),
-        offerId: String(doc.offerId || ""),
-        offerType: doc.offerType,
-        offerTitle: doc.offerTitle,
-        status: doc.status,
-        paymentStatus: doc.paymentStatus,
-        key: clubProgramCourseKey(docOffer, doc),
-        closed: isRevokedOrClosedBooking(doc),
-        hasOffer: !!docOffer,
-      };
-    }),
-  );
+  // console.log("DEBUG duplicate search", {
+  //   owner: String(offer.owner),
+  //   first,
+  //   last,
+  //   email,
+  //   courseKey,
+  // });
+  // console.log(
+  //   "DEBUG duplicate docs",
+  //   docs.map((doc) => {
+  //     const docOffer = offerMap.get(String(doc.offerId || ""));
+  //     return {
+  //       id: String(doc._id),
+  //       offerId: String(doc.offerId || ""),
+  //       offerType: doc.offerType,
+  //       offerTitle: doc.offerTitle,
+  //       status: doc.status,
+  //       paymentStatus: doc.paymentStatus,
+  //       key: clubProgramCourseKey(docOffer, doc),
+  //       closed: isRevokedOrClosedBooking(doc),
+  //       hasOffer: !!docOffer,
+  //     };
+  //   }),
+  // );
 
   return (
     docs.find((doc) => {
@@ -816,12 +816,7 @@ function computeProrate({ isWeekly, monthlyPrice, date }) {
 //   return {
 //     currency: "EUR",
 //     priceAtBooking: finalPrice != null ? finalPrice : undefined,
-//     priceMonthly:
-//       isWeekly && monthlyPrice != null
-//         ? monthlyPrice
-//         : finalPrice != null
-//           ? finalPrice
-//           : null,
+//     priceMonthly: isWeekly && monthlyPrice != null ? monthlyPrice : null,
 //     priceFirstMonth:
 //       isWeekly && pro?.firstMonthPrice != null
 //         ? Number(pro.firstMonthPrice)
@@ -829,15 +824,18 @@ function computeProrate({ isWeekly, monthlyPrice, date }) {
 //   };
 // }
 
-function computePrices({ isWeekly, monthlyPrice, finalPrice, pro }) {
+function computePrices({
+  isWeekly,
+  monthlyPrice,
+  finalPrice,
+  firstMonthPrice,
+}) {
   return {
     currency: "EUR",
     priceAtBooking: finalPrice != null ? finalPrice : undefined,
     priceMonthly: isWeekly && monthlyPrice != null ? monthlyPrice : null,
     priceFirstMonth:
-      isWeekly && pro?.firstMonthPrice != null
-        ? Number(pro.firstMonthPrice)
-        : null,
+      isWeekly && firstMonthPrice != null ? Number(firstMonthPrice) : null,
   };
 }
 
@@ -847,7 +845,8 @@ function isVoucherRelevantOneTimeOffer(offer) {
     category === "Holiday" ||
     category === "RentACoach" ||
     category === "ClubPrograms" ||
-    category === "Individual"
+    category === "Individual" ||
+    category === "Weekly"
   );
 }
 
@@ -999,9 +998,25 @@ async function sendProcessingSafe({ created, offer, isNonTrial }) {
   }
 }
 
-// function bookingStatus({ isHoliday, isCamp, isPower }) {
-//   return isHoliday || isCamp || isPower ? "processing" : "pending";
-// }
+// async function createBookingDoc({
+//   body,
+//   offer,
+//   autoConfirm,
+//   autoProcessing,
+//   first,
+//   last,
+//   meta,
+//   finalPrice,
+//   pro,
+//   isWeekly,
+//   monthlyPrice,
+// }) {
+//   const prices = computePrices({
+//     isWeekly,
+//     monthlyPrice,
+//     finalPrice,
+//     pro,
+//   });
 
 async function createBookingDoc({
   body,
@@ -1012,7 +1027,7 @@ async function createBookingDoc({
   last,
   meta,
   finalPrice,
-  pro,
+  firstMonthPrice,
   isWeekly,
   monthlyPrice,
 }) {
@@ -1020,7 +1035,7 @@ async function createBookingDoc({
     isWeekly,
     monthlyPrice,
     finalPrice,
-    pro,
+    firstMonthPrice,
   });
 
   const source = bookingSourceFromBody(body);
@@ -1034,9 +1049,6 @@ async function createBookingDoc({
     firstName: first,
     lastName: last,
     email: safeEmail(body?.email),
-    // age: Number(body?.age),
-    // date: String(body?.date),
-    // level: String(body?.level),
 
     age: body?.age == null || body?.age === "" ? undefined : Number(body.age),
     date: String(body?.date),
@@ -1097,101 +1109,6 @@ async function ensureHolidayConfirmationCode({ created, isHoliday }) {
 function normalizeVoucherCode(v) {
   return safeText(v).toUpperCase();
 }
-
-// async function loadVoucherAmount({ ownerId, code }) {
-//   const normalizedCode = normalizeVoucherCode(code);
-//   if (!normalizedCode) return 0;
-
-//   const voucher = await Voucher.findOne({
-//     owner: ownerId,
-//     code: normalizedCode,
-//     active: true,
-//   })
-//     .select("amount code")
-//     .lean();
-
-//   if (!voucher) return 0;
-
-//   const amount = Number(voucher.amount);
-//   return Number.isFinite(amount) && amount > 0 ? amount : 0;
-// }
-
-// async function computeDiscounts({
-//   body,
-//   offer,
-//   isCamp,
-//   first,
-//   last,
-//   birthDateRaw,
-//   hasSibling,
-//   parentEmail,
-//   meta,
-//   invoiceTo,
-// }) {
-//   let siblingDiscount = 0;
-//   let mainMemberDiscount = 0;
-//   let siblingMemberDiscount = 0;
-
-//   if (isCamp && hasSibling) siblingDiscount = 14;
-
-//   if (isCamp) {
-//     const mainHasWeekly = await hasWeekly({
-//       offer,
-//       first,
-//       last,
-//       birthDateRaw,
-//       parentEmail,
-//     });
-
-//     mainMemberDiscount = mainHasWeekly ? 14 : 0;
-
-//     const siblingHasWeekly = hasSibling
-//       ? await hasSiblingWeeklyMembership({
-//           offer,
-//           meta,
-//           invoiceTo,
-//           fallbackEmail: parentEmail,
-//         })
-//       : false;
-
-//     siblingMemberDiscount = siblingHasWeekly ? 14 : 0;
-//   }
-
-//   const memberDiscount = mainMemberDiscount + siblingMemberDiscount;
-
-//   const mainGoalkeeperSurcharge = goalkeeperSurcharge(
-//     meta?.mainGoalkeeperSchool === true,
-//   );
-
-//   const siblingGoalkeeperSurcharge = goalkeeperSurcharge(
-//     meta?.siblingGoalkeeperSchool === true,
-//   );
-
-//   const goalkeeperTotal = mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
-
-//   const voucherCode = normalizeVoucherCode(meta?.voucher || body?.voucher);
-//   const voucherDiscount = voucherCode
-//     ? await loadVoucherAmount({
-//         ownerId: offer.owner,
-//         code: voucherCode,
-//       })
-//     : 0;
-
-//   const totalDiscount = siblingDiscount + memberDiscount + voucherDiscount;
-
-//   return {
-//     siblingDiscount,
-//     memberDiscount,
-//     mainMemberDiscount,
-//     siblingMemberDiscount,
-//     mainGoalkeeperSurcharge,
-//     siblingGoalkeeperSurcharge,
-//     goalkeeperTotal,
-//     voucherCode,
-//     voucherDiscount,
-//     totalDiscount,
-//   };
-// }
 
 async function computeDiscounts({
   body,
@@ -1550,21 +1467,6 @@ async function createBookingCore({ body, providerId }) {
     }
   }
 
-  // const discounts = await computeDiscounts({
-  //   body,
-  //   offer: ctx.offer,
-  //   isCamp: ctx.isCamp,
-  //   first: ctx.first,
-  //   last: ctx.last,
-  //   birthDateRaw: ctx.birthDateRaw,
-  //   hasSibling: ctx.hasSibling,
-  //   parentEmail: safeEmail(invoiceTo?.parent?.email || body.email),
-  //   meta: {
-  //     ...buildHolidayMetaFromBody(body, ctx.offer),
-  //     ...ctx.meta,
-  //   },
-  //   invoiceTo,
-  // });
   const mergedHolidayMeta = {
     ...buildHolidayMetaFromBody(body, ctx.offer),
     ...ctx.meta,
@@ -1603,8 +1505,8 @@ async function createBookingCore({ body, providerId }) {
   //     : basePrice;
 
   // const finalPrice =
-  //   ctx.isCamp && grossPrice != null
-  //     ? Math.max(0, grossPrice - discounts.totalDiscount)
+  //   !isWeekly && grossPrice != null
+  //     ? Math.max(0, grossPrice - Number(discounts.totalDiscount || 0))
   //     : basePrice;
 
   const grossPrice =
@@ -1612,10 +1514,22 @@ async function createBookingCore({ body, providerId }) {
       ? basePrice + Number(discounts.goalkeeperTotal || 0)
       : basePrice;
 
-  const finalPrice =
-    !isWeekly && grossPrice != null
+  const grossFirstMonth =
+    isWeekly && pro?.firstMonthPrice != null
+      ? Number(pro.firstMonthPrice)
+      : null;
+
+  const discountedFirstMonth =
+    grossFirstMonth != null
+      ? Math.max(0, grossFirstMonth - Number(discounts.totalDiscount || 0))
+      : null;
+
+  const discountedOneTime =
+    grossPrice != null
       ? Math.max(0, grossPrice - Number(discounts.totalDiscount || 0))
-      : basePrice;
+      : null;
+
+  const finalPrice = isWeekly ? discountedFirstMonth : discountedOneTime;
 
   const approvalMeta =
     isTeam || ctx.isIndividual === true
@@ -1628,19 +1542,14 @@ async function createBookingCore({ body, providerId }) {
         }
       : { paymentApprovalRequired: false };
 
-  // const holidayMeta = buildHolidayMetaFromBody(body, ctx.offer);
-
-  // const mergedHolidayMeta = {
-  //   ...holidayMeta,
-  //   ...ctx.meta,
-  // };
-
   // const meta = {
   //   ...mergedHolidayMeta,
   //   ...approvalMeta,
   //   basePrice,
   //   grossPrice,
   //   ...discounts,
+  //   voucher: discounts.voucherCode || mergedHolidayMeta.voucher || "",
+  //   voucherCode: discounts.voucherCode || mergedHolidayMeta.voucherCode || "",
   // };
 
   const meta = {
@@ -1648,10 +1557,26 @@ async function createBookingCore({ body, providerId }) {
     ...approvalMeta,
     basePrice,
     grossPrice,
+    grossFirstMonth,
+    finalPrice,
     ...discounts,
     voucher: discounts.voucherCode || mergedHolidayMeta.voucher || "",
     voucherCode: discounts.voucherCode || mergedHolidayMeta.voucherCode || "",
   };
+
+  // const created = await createBookingDoc({
+  //   body,
+  //   offer: ctx.offer,
+  //   autoConfirm,
+  //   autoProcessing,
+  //   first: ctx.first,
+  //   last: ctx.last,
+  //   meta,
+  //   finalPrice,
+  //   pro,
+  //   isWeekly,
+  //   monthlyPrice,
+  // });
 
   const created = await createBookingDoc({
     body,
@@ -1662,7 +1587,7 @@ async function createBookingCore({ body, providerId }) {
     last: ctx.last,
     meta,
     finalPrice,
-    pro,
+    firstMonthPrice: discountedFirstMonth,
     isWeekly,
     monthlyPrice,
   });
