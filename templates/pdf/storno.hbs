@@ -1,39 +1,42 @@
 <!doctype html>
 <html lang="de">
+
 <head>
   <meta charset="utf-8" />
   <title>Storno-Rechnung – {{brand.company}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./_base.css" />
 </head>
+
 <body>
-<main class="doc">
+  <main class="doc">
 
-  <!-- Kopfband -->
-  <div class="topband">
-    <span class="claim">{{brand.company}}</span>
-    {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
-  </div>
+    <div class="topband">
+      <span class="claim">{{brand.company}}</span>
+      {{#if brand.logoUrl}}<img class="brand-logo" src="{{brand.logoUrl}}" alt="{{brand.company}}">{{/if}}
+    </div>
 
-  <!-- Empfängeradresse -->
-  <div class="addr">
-    {{#if customer.parent.salutation}}<span class="line">{{customer.parent.salutation}}</span>{{/if}}
-    <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
-    {{#if customer.address.street}}<span class="line">{{customer.address.street}}{{#if customer.address.houseNo}} {{customer.address.houseNo}}{{/if}}</span>{{/if}}
-    {{#if customer.address.zip}}<span class="line">{{customer.address.zip}}{{#if customer.address.city}} {{customer.address.city}}{{/if}}</span>{{/if}}
-  </div>
+    <div class="addr">
+      {{#if customer.parent.salutation}}<span class="line">{{customer.parent.salutation}}</span>{{/if}}
+      <span class="line">{{customer.parent.firstName}} {{customer.parent.lastName}}</span>
+      {{#if customer.address.street}}<span class="line">{{customer.address.street}}{{#if customer.address.houseNo}}
+        {{customer.address.houseNo}}{{/if}}</span>{{/if}}
+      {{#if customer.address.zip}}<span class="line">{{customer.address.zip}}{{#if customer.address.city}}
+        {{customer.address.city}}{{/if}}</span>{{/if}}
+    </div>
 
-  <!-- Titel + Intro -->
-  <h1 class="subject">Storno-Rechnung</h1>
-  <p> Stornierung der Teilnahme von <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong> an unserem Angebot</p>
+    <h1 class="subject">Storno-Rechnung</h1>
+    <p>Stornierung der Teilnahme von <strong>{{customer.child.firstName}} {{customer.child.lastName}}</strong> an
+      unserem Angebot</p>
 
-  <!-- Rechnungsdaten -->
-  <div class="section-title">Rechnungsdaten</div>
-  <div class="facts">
-    {{#if booking.stornoNo}}     <div class="row"><span class="k">Storno-Nr.:</span>         <span class="v">{{booking.stornoNo}}</span></div>{{/if}}
-    {{#if customer.userId}}      <div class="row"><span class="k">Kunden-Nr.:</span>         <span class="v">{{customer.userId}}</span></div>{{/if}}
+    <div class="section-title">Rechnungsdaten</div>
+    <div class="facts">
+      {{#if booking.stornoNo}}<div class="row"><span class="k">Storno-Nr.:</span><span
+          class="v">{{booking.stornoNo}}</span></div>{{/if}}
+      {{#if customer.userId}}<div class="row"><span class="k">Kunden-Nr.:</span><span
+          class="v">{{customer.userId}}</span></div>{{/if}}
 
-    {{#if booking.refInvoiceNo}}
+      {{#if booking.refInvoiceNo}}
       <div class="row">
         <span class="k">Referenzrechnung:</span>
         <span class="v">
@@ -42,102 +45,100 @@
           {{#if booking.refInvoiceDateDE}} ({{booking.refInvoiceDateDE}}){{/if}}
         </span>
       </div>
-    {{/if}}
+      {{/if}}
 
-    <!-- NEU: Storno-Datum direkt unter Referenzrechnung -->
-    {{#if booking.cancelDate}}
+      {{#if booking.cancelDate}}
       <div class="row">
         <span class="k">Storno-Datum:</span>
         <span class="v">{{fmtDate booking.cancelDate}}</span>
       </div>
+      {{/if}}
+    </div>
+
+    {{#if booking.discount}}
+    {{#if booking.discount.voucherDiscount}}
+    <div class="section-title">Hinweis zur Ursprungsrechnung</div>
+    <div class="notes">
+      <p>
+        Der stornierten Berechnung lag bereits ein rabattierter Ursprungsbetrag zugrunde.
+        {{#if booking.discount.voucherCode}}
+        Der Gutschein <strong>{{booking.discount.voucherCode}}</strong>
+        wurde bei der Ursprungsrechnung berücksichtigt.
+        {{else}}
+        Ein Gutschein wurde bei der Ursprungsrechnung berücksichtigt.
+        {{/if}}
+        {{#if booking.discount.finalPrice}}
+        Maßgeblich war dabei ein bereits reduzierter Rechnungsbetrag von
+        <strong>{{fmtMoney booking.discount.finalPrice "EUR"}}</strong>.
+        {{/if}}
+      </p>
+    </div>
+    {{/if}}
     {{/if}}
 
-    
-  </div>
+    <div class="sep-line"></div>
 
-  <div class="sep-line"></div>
-
-  <!-- Positionen -->
-  <h2 class="h2">Angebot</h2>
-  <table class="items" role="presentation">
-    <!-- Kopf: Kurs (ohne Adresse) + Storno-Datum; Venue separat -->
-    <tr>
-      <td class="desc muted small">
-        {{#if booking.offerTitle}}
-          {{courseOnly booking.offerTitle}}
-        {{else if booking.offerType}}
-          {{courseOnly booking.offerType}}
-        {{else}}
-          {{courseOnly booking.offer}}
-        {{/if}}
-       
-        {{#if booking.venue}}<br/>Veranstaltungsort: {{booking.venue}}{{/if}}
-      </td>
-      <td class="amt"></td>
-    </tr>
-
-    <!-- Position -->
-    <tr>
-      <td class="desc"><strong>Storno Betrag</strong></td>
-      <td class="amt">{{fmtMoney amount currency}}</td>
-    </tr>
-  </table>
-
-  <div class="sep-line"></div>
-
-  <!-- Summe -->
-  <div class="total-line">
-    <span class="label">Gesamt:</span>
-    <span class="value">{{fmtMoney amount currency}}</span>
-  </div>
-
-  <!-- (Entfernt) KEINE Linie direkt unter der Summe -->
-  <!-- <div class="sep-line"></div> -->
-
-  <!-- Hinweis -->
-  <div class="section-title">Hinweis</div>
-  <div class="notes">
-    <p>{{#if taxNote}}{{taxNote}}{{else}}Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG.{{/if}}</p>
-  </div>
-
-  <!-- Footer -->
-  <div class="footer-spacer"></div>
-  <footer class="footer">
-    <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
+    <h2 class="h2">Angebot</h2>
+    <table class="items" role="presentation">
       <tr>
-        <td class="footer-col brand">
-          <strong>Münchner Fussball Schule NRW</strong><br/>
-          Hochfelder Straße 33<br/>
-          47226 Duisburg<br/>
-          Deutschland
+        <td class="desc muted small">
+          {{#if booking.offerTitle}}
+          {{courseOnly booking.offerTitle}}
+          {{else if booking.offerType}}
+          {{courseOnly booking.offerType}}
+          {{else}}
+          {{courseOnly booking.offer}}
+          {{/if}}
+          {{#if booking.venue}}<br />Veranstaltungsort: {{booking.venue}}{{/if}}
         </td>
-        <td class="footer-col meta">
-          <span class="k">Inhaber:</span> <span class="v">Selcuk Kocyigit</span><br/>
-          <span class="k">Tel.:</span> <span class="v">0176-43203362</span><br/>
-          <a href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br/>
-          <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
-        </td>
-        <td class="footer-col bank">
-          <span class="k">Bank:</span> <span class="v">Commerzbank</span><br/>
-          <span class="k">IBAN:</span> <span class="v nowrap">DE13350400380595090200</span><br/>
-          <span class="k">BIC:</span> <span class="v nowrap">COBADEFFXXX</span>
-        </td>
+        <td class="amt"></td>
+      </tr>
+
+      <tr>
+        <td class="desc"><strong>Storno Betrag</strong></td>
+        <td class="amt">{{fmtMoney amount currency}}</td>
       </tr>
     </table>
-  </footer>
 
-</main>
+    <div class="sep-line"></div>
+
+    <div class="total-line">
+      <span class="label">Gesamt:</span>
+      <span class="value">{{fmtMoney amount currency}}</span>
+    </div>
+
+    <div class="section-title">Hinweis</div>
+    <div class="notes">
+      <p>{{#if taxNote}}{{taxNote}}{{else}}Umsatzsteuerbefreiung gem. § 4 Nr. 21 UStG.{{/if}}</p>
+    </div>
+
+    <div class="footer-spacer"></div>
+    <footer class="footer">
+      <table class="footer-table" cellspacing="0" cellpadding="0" role="presentation">
+        <tr>
+          <td class="footer-col brand">
+            <strong>Münchner Fussball Schule NRW</strong><br />
+            Hochfelder Straße 33<br />
+            47226 Duisburg<br />
+            Deutschland
+          </td>
+          <td class="footer-col meta">
+            <span class="k">Inhaber:</span> <span class="v">Selcuk Kocyigit</span><br />
+            <span class="k">Tel.:</span> <span class="v">0176-43203362</span><br />
+            <a
+              href="mailto:s.kocyigit@muenchner-fussball-schule.ruhr">s.kocyigit@muenchner-fussball-schule.ruhr</a><br />
+            <a href="https://muenchner-fussball-schule.ruhr">https://muenchner-fussball-schule.ruhr</a>
+          </td>
+          <td class="footer-col bank">
+            <span class="k">Bank:</span> <span class="v">Commerzbank</span><br />
+            <span class="k">IBAN:</span> <span class="v nowrap">DE13350400380595090200</span><br />
+            <span class="k">BIC:</span> <span class="v nowrap">COBADEFFXXX</span>
+          </td>
+        </tr>
+      </table>
+    </footer>
+
+  </main>
 </body>
+
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
