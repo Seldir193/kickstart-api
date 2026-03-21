@@ -97,57 +97,6 @@ async function bookingPdfBuffer(booking) {
   return htmlRenderer.bookingPdfBufferHTML(booking);
 }
 
-// function computeIsWeekly(offer) {
-//   if (!offer) return false;
-//   if (String(offer.category || "") === "Weekly") return true;
-
-//   const t = String(offer.type || "");
-//   if (t === "Foerdertraining" || t === "Kindergarten") return true;
-
-//   const sub = String(offer.sub_type || "").toLowerCase();
-//   if (sub === "powertraining") return false;
-//   if (t === "PersonalTraining") return false;
-
-//   return false;
-// }
-
-// function computeIsWeekly(offer) {
-//   if (!offer) return false;
-
-//   const category = String(offer.category || "").trim();
-//   const type = String(offer.type || "").trim();
-//   const subType = String(offer.sub_type || "")
-//     .trim()
-//     .toLowerCase();
-//   const title = String(offer.title || "")
-//     .trim()
-//     .toLowerCase();
-
-//   const isExplicitNonWeekly =
-//     category === "RentACoach" ||
-//     category === "ClubPrograms" ||
-//     category === "Individual" ||
-//     category === "Holiday" ||
-//     category === "HolidayPrograms" ||
-//     subType.startsWith("rentacoach") ||
-//     subType.includes("coacheducation") ||
-//     subType.includes("trainingcamp") ||
-//     subType.includes("trainingscamp") ||
-//     subType.includes("powertraining") ||
-//     subType.startsWith("clubprogram") ||
-//     type === "PersonalTraining" ||
-//     title.includes("rentacoach") ||
-//     title.includes("coacheducation") ||
-//     title.includes("powertraining");
-
-//   if (isExplicitNonWeekly) return false;
-
-//   if (category === "Weekly") return true;
-//   if (type === "Foerdertraining" || type === "Kindergarten") return true;
-
-//   return false;
-// }
-
 function computeIsWeekly(offer) {
   if (!offer) return false;
 
@@ -245,6 +194,7 @@ async function buildParticipationPdf({
       shaped.booking.currency ||
       "EUR",
   );
+
   shaped.invoice.currency = CURRENCY;
   shaped.pricing.currency = CURRENCY;
 
@@ -273,10 +223,13 @@ async function buildParticipationPdf({
   shaped.invoice.number = shaped.invoice.number || effectiveInvoiceNo;
   shaped.invoice.date = shaped.invoice.date || effectiveInvoiceDate;
 
-  if (monthlyAmount != null)
+  if (monthlyAmount != null) {
     shaped.booking.monthlyAmount = Number(monthlyAmount);
-  if (firstMonthAmount != null)
+  }
+
+  if (firstMonthAmount != null) {
     shaped.booking.firstMonthAmount = Number(firstMonthAmount);
+  }
 
   shaped.booking.dayTimes =
     shaped.booking.dayTimes ||
@@ -300,8 +253,6 @@ async function buildParticipationPdf({
       toNum(shaped.booking.monthlyAmount) ??
       toNum(booking?.monthlyAmount) ??
       toNum(booking?.priceMonthly) ??
-      toNum(shaped.booking.priceAtBooking) ??
-      toNum(booking?.priceAtBooking) ??
       toNumNonZero(shaped.invoice.monthly) ??
       toNumNonZero(shaped.pricing.monthly) ??
       toNum(offer?.price);
@@ -324,6 +275,24 @@ async function buildParticipationPdf({
       shaped.pricing.firstMonth = firstMonth;
     }
 
+    const meta =
+      booking && typeof booking.meta === "object" ? booking.meta : {};
+
+    const voucherDiscount = toNum(meta.voucherDiscount) ?? 0;
+    const totalDiscount = toNum(meta.totalDiscount) ?? voucherDiscount;
+
+    shaped.booking.discount = {
+      ...(shaped.booking.discount || {}),
+      voucherCode: safeText(meta.voucherCode || meta.voucher),
+      voucherDiscount,
+      totalDiscount,
+      finalPrice:
+        toNum(booking?.priceAtBooking) ??
+        toNum(shaped.booking.priceAtBooking) ??
+        toNum(firstMonth) ??
+        null,
+    };
+
     delete shaped.invoice.oneOff;
     delete shaped.pricing.oneOff;
     delete shaped.invoice.single;
@@ -336,7 +305,6 @@ async function buildParticipationPdf({
     const grossPrice = toNum(meta.grossPrice);
 
     const mainGoalkeeperSurcharge = toNum(meta.mainGoalkeeperSurcharge) ?? 0;
-
     const siblingGoalkeeperSurcharge =
       toNum(meta.siblingGoalkeeperSurcharge) ?? 0;
 
@@ -394,13 +362,6 @@ async function buildParticipationPdf({
   shaped.booking.isWeekly = isWeekly;
   shaped.isWeekly = isWeekly;
 
-  console.log("[PDF DEBUG shaped.booking.discount]", {
-    offerTitle: shaped?.booking?.offerTitle,
-    offer: shaped?.booking?.offer,
-    priceAtBooking: shaped?.booking?.priceAtBooking,
-    discount: shaped?.booking?.discount || null,
-  });
-
   return htmlRenderer.buildParticipationPdfHTML({
     customer: shaped.customer,
     booking: shaped.booking,
@@ -416,6 +377,195 @@ async function buildParticipationPdf({
   });
 }
 
+// async function buildParticipationPdf({
+//   customer,
+//   booking,
+//   offer,
+//   invoiceNo,
+//   invoiceDate,
+//   monthlyAmount,
+//   firstMonthAmount,
+//   venue,
+// } = {}) {
+//   assertFn("buildParticipationPdfHTML");
+
+//   const shaped = shapeParticipationData({ customer, booking, offer });
+//   const isWeekly = computeIsWeekly(offer);
+
+//   shaped.invoice = shaped.invoice || {};
+//   shaped.pricing = shaped.pricing || {};
+//   shaped.customer = shaped.customer || {};
+//   shaped.booking = shaped.booking || {};
+
+//   const CURRENCY = String(
+//     shaped.invoice.currency ||
+//       shaped.pricing.currency ||
+//       shaped.booking.currency ||
+//       "EUR",
+//   );
+//   shaped.invoice.currency = CURRENCY;
+//   shaped.pricing.currency = CURRENCY;
+
+//   if (venue && !shaped.booking.venue) shaped.booking.venue = venue;
+
+//   if (invoiceNo) shaped.booking.invoiceNo = normalizeInvoiceNo(invoiceNo);
+//   if (invoiceDate) shaped.booking.invoiceDate = String(invoiceDate);
+
+//   const effectiveInvoiceNo =
+//     normalizeInvoiceNo(invoiceNo) ||
+//     normalizeInvoiceNo(shaped.booking.invoiceNo) ||
+//     normalizeInvoiceNo(booking?.invoiceNo) ||
+//     normalizeInvoiceNo(booking?.invoiceNumber) ||
+//     "";
+
+//   const effectiveInvoiceDate =
+//     (invoiceDate != null && String(invoiceDate)) ||
+//     shaped.booking.invoiceDate ||
+//     booking?.invoiceDate ||
+//     "";
+
+//   shaped.booking.invoiceNo = effectiveInvoiceNo || shaped.booking.invoiceNo;
+//   shaped.booking.invoiceDate =
+//     effectiveInvoiceDate || shaped.booking.invoiceDate;
+
+//   shaped.invoice.number = shaped.invoice.number || effectiveInvoiceNo;
+//   shaped.invoice.date = shaped.invoice.date || effectiveInvoiceDate;
+
+//   if (monthlyAmount != null)
+//     shaped.booking.monthlyAmount = Number(monthlyAmount);
+//   if (firstMonthAmount != null)
+//     shaped.booking.firstMonthAmount = Number(firstMonthAmount);
+
+//   shaped.booking.dayTimes =
+//     shaped.booking.dayTimes ||
+//     booking?.dayTimes ||
+//     booking?.kurstag ||
+//     booking?.weekday ||
+//     "";
+
+//   shaped.booking.timeDisplay =
+//     shaped.booking.timeDisplay ||
+//     booking?.timeDisplay ||
+//     booking?.kurszeit ||
+//     booking?.time ||
+//     booking?.uhrzeit ||
+//     "";
+
+//   const startISO = shaped.booking.date || booking?.date || "";
+
+//   if (isWeekly) {
+//     const monthly =
+//       toNum(shaped.booking.monthlyAmount) ??
+//       toNum(booking?.monthlyAmount) ??
+//       toNum(booking?.priceMonthly) ??
+//       toNum(shaped.booking.priceAtBooking) ??
+//       toNum(booking?.priceAtBooking) ??
+//       toNumNonZero(shaped.invoice.monthly) ??
+//       toNumNonZero(shaped.pricing.monthly) ??
+//       toNum(offer?.price);
+
+//     if (monthly != null) {
+//       shaped.invoice.monthly = monthly;
+//       shaped.pricing.monthly = monthly;
+//     }
+
+//     const firstMonth =
+//       toNum(shaped.booking.firstMonthAmount) ??
+//       toNum(booking?.firstMonthAmount) ??
+//       toNum(booking?.priceFirstMonth) ??
+//       toNumNonZero(shaped.invoice.firstMonth) ??
+//       toNumNonZero(shaped.pricing.firstMonth) ??
+//       (monthly != null ? prorate(startISO, monthly) : undefined);
+
+//     if (firstMonth != null) {
+//       shaped.invoice.firstMonth = firstMonth;
+//       shaped.pricing.firstMonth = firstMonth;
+//     }
+
+//     delete shaped.invoice.oneOff;
+//     delete shaped.pricing.oneOff;
+//     delete shaped.invoice.single;
+//     delete shaped.pricing.single;
+//   } else {
+//     const meta =
+//       booking && typeof booking.meta === "object" ? booking.meta : {};
+
+//     const basePrice = toNum(meta.basePrice);
+//     const grossPrice = toNum(meta.grossPrice);
+
+//     const mainGoalkeeperSurcharge = toNum(meta.mainGoalkeeperSurcharge) ?? 0;
+
+//     const siblingGoalkeeperSurcharge =
+//       toNum(meta.siblingGoalkeeperSurcharge) ?? 0;
+
+//     const goalkeeperTotal =
+//       toNum(meta.goalkeeperTotal) ??
+//       mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
+
+//     const siblingDiscount = toNum(meta.siblingDiscount) ?? 0;
+//     const mainMemberDiscount = toNum(meta.mainMemberDiscount) ?? 0;
+//     const siblingMemberDiscount = toNum(meta.siblingMemberDiscount) ?? 0;
+
+//     const memberDiscount =
+//       toNum(meta.memberDiscount) ?? mainMemberDiscount + siblingMemberDiscount;
+
+//     const voucherDiscount = toNum(meta.voucherDiscount) ?? 0;
+
+//     const totalDiscount =
+//       toNum(meta.totalDiscount) ??
+//       siblingDiscount + memberDiscount + voucherDiscount;
+
+//     const finalPrice =
+//       toNum(booking?.priceAtBooking) ??
+//       toNum(shaped.booking.priceAtBooking) ??
+//       (grossPrice != null ? grossPrice - totalDiscount : undefined) ??
+//       toNumNonZero(shaped.invoice.single) ??
+//       toNumNonZero(shaped.invoice.oneOff) ??
+//       toNumNonZero(shaped.pricing.single) ??
+//       toNum(offer?.price);
+
+//     shaped.booking.discount = {
+//       basePrice: basePrice ?? null,
+//       grossPrice: grossPrice ?? null,
+//       mainGoalkeeperSurcharge,
+//       siblingGoalkeeperSurcharge,
+//       goalkeeperTotal,
+//       siblingDiscount,
+//       mainMemberDiscount,
+//       siblingMemberDiscount,
+//       memberDiscount,
+//       voucherCode: safeText(meta.voucherCode || meta.voucher),
+//       voucherDiscount,
+//       totalDiscount,
+//       finalPrice: finalPrice ?? grossPrice ?? basePrice ?? null,
+//     };
+
+//     if (finalPrice != null) {
+//       shaped.invoice.single = finalPrice;
+//       shaped.pricing.single = finalPrice;
+//     }
+
+//     delete shaped.pricing.firstMonth;
+//     delete shaped.invoice.firstMonth;
+//   }
+
+//   shaped.booking.isWeekly = isWeekly;
+//   shaped.isWeekly = isWeekly;
+
+//   return htmlRenderer.buildParticipationPdfHTML({
+//     customer: shaped.customer,
+//     booking: shaped.booking,
+//     offer,
+//     invoiceNo: effectiveInvoiceNo,
+//     invoiceDate: effectiveInvoiceDate,
+//     monthlyAmount,
+//     firstMonthAmount,
+//     venue,
+//     isWeekly,
+//     pricing: shaped.pricing,
+//     invoice: shaped.invoice,
+//   });
+// }
 async function buildCancellationPdf({
   customer,
   booking,
@@ -447,18 +597,26 @@ async function buildCancellationPdf({
   if (referenceInvoice?.number && !shaped.booking.refInvoiceNo) {
     shaped.booking.refInvoiceNo = normalizeInvoiceNo(referenceInvoice.number);
   }
+
   if (referenceInvoice?.date && !shaped.booking.refInvoiceDate) {
     shaped.booking.refInvoiceDate = String(referenceInvoice.date);
   }
 
-  if (!shaped.booking.refInvoiceNo)
+  if (!shaped.booking.refInvoiceNo) {
     shaped.booking.refInvoiceNo = shaped.booking.invoiceNo || "";
-  if (!shaped.booking.refInvoiceDate)
-    shaped.booking.refInvoiceDate = shaped.booking.invoiceDate || "";
+  }
 
-  if (!shaped.booking.cancelDate)
+  if (!shaped.booking.refInvoiceDate) {
+    shaped.booking.refInvoiceDate = shaped.booking.invoiceDate || "";
+  }
+
+  if (!shaped.booking.cancelDate) {
     shaped.booking.cancelDate = shaped.details.cancelDate;
-  if (!shaped.booking.endDate) shaped.booking.endDate = shaped.details.endDate;
+  }
+
+  if (!shaped.booking.endDate) {
+    shaped.booking.endDate = shaped.details.endDate;
+  }
 
   console.log("[PDF cancel] dates:", {
     requestDate: shaped.details.requestDate,
@@ -498,12 +656,42 @@ async function buildStornoPdf({
     currency,
   });
 
+  const meta = booking && typeof booking.meta === "object" ? booking.meta : {};
+  const voucherDiscount = toNum(meta.voucherDiscount) ?? 0;
+  const totalDiscount = toNum(meta.totalDiscount) ?? voucherDiscount;
+
+  const grossBase =
+    toNum(meta.grossPrice) ??
+    toNum(meta.basePrice) ??
+    toNum(offer?.price) ??
+    undefined;
+
+  const discountedOriginalAmount =
+    toNum(booking?.priceAtBooking) ??
+    toNum(meta.finalPrice) ??
+    (grossBase != null ? grossBase - totalDiscount : undefined);
+
+  shaped.booking.discount = {
+    ...(shaped.booking.discount || {}),
+    voucherCode: safeText(meta.voucherCode || meta.voucher),
+    voucherDiscount,
+    totalDiscount,
+    finalPrice: discountedOriginalAmount ?? null,
+  };
+
   const effAmount =
     toNum(shaped.amount) ??
     toNum(booking?.stornoAmount) ??
-    toNum(booking?.priceAtBooking) ??
+    discountedOriginalAmount ??
     toNum(offer?.price) ??
     0;
+
+  // const effAmount =
+  //   toNum(shaped.amount) ??
+  //   toNum(booking?.stornoAmount) ??
+  //   toNum(booking?.priceAtBooking) ??
+  //   toNum(offer?.price) ??
+  //   0;
 
   const curr = String(shaped.currency || "EUR");
 
@@ -523,13 +711,6 @@ async function buildStornoPdf({
     shaped.booking.refInvoiceNo = shaped.booking.invoiceNo || "";
   if (!shaped.booking.refInvoiceDate)
     shaped.booking.refInvoiceDate = shaped.booking.invoiceDate || "";
-
-  console.log("[PDF storno] ref:", {
-    refNo: shaped.booking.refInvoiceNo,
-    refDate: shaped.booking.refInvoiceDate,
-    invNo: shaped.booking.invoiceNo,
-    invDate: shaped.booking.invoiceDate,
-  });
 
   return htmlRenderer.buildStornoPdfHTML({
     customer: shaped.customer,
