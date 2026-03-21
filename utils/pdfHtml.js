@@ -206,10 +206,10 @@ function compileTemplate(baseName, data) {
   const filePath = resolveHbsPath(baseName);
   let html = filePath ? safeRead(filePath) : null;
 
-  console.log("[PDF TEMPLATE PATH]", {
-    baseName,
-    filePath,
-  });
+  // console.log("[PDF TEMPLATE PATH]", {
+  //   baseName,
+  //   filePath,
+  // });
 
   if (!html) {
     html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>PDF</title></head>
@@ -387,7 +387,6 @@ async function buildParticipationPdfHTML({
     return new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(d);
   }
 
-  //teil2
   function timeRangeFromOffer(off, weekdayName = "") {
     if (!off) return "";
     const join = (f, t) =>
@@ -467,6 +466,7 @@ async function buildParticipationPdfHTML({
     effInvoice.monthly = monthlyAmount;
     effPricing.monthly = monthlyAmount;
   }
+
   if (weekly && typeof firstMonthAmount === "number") {
     effInvoice.firstMonth = firstMonthAmount;
     effPricing.firstMonth = firstMonthAmount;
@@ -478,7 +478,7 @@ async function buildParticipationPdfHTML({
 
   let discount = null;
 
-  if (!weekly && booking) {
+  if (booking) {
     if (booking.discount) {
       discount = { ...booking.discount };
     } else {
@@ -542,6 +542,7 @@ async function buildParticipationPdfHTML({
         finalPrice,
       };
     }
+
     if (discount) {
       discount.voucherCode = String(discount.voucherCode || "").trim();
       discount.voucherDiscount = Number(discount.voucherDiscount || 0);
@@ -553,53 +554,6 @@ async function buildParticipationPdfHTML({
         : "Gutschein";
     }
   }
-
-  // let discount = null;
-
-  // if (!weekly && booking) {
-  //   if (booking.discount) {
-  //     discount = { ...booking.discount };
-  //   } else {
-  //     const meta =
-  //       booking?.meta && typeof booking.meta === "object" ? booking.meta : {};
-
-  //     const siblingDiscount = Number(meta.siblingDiscount || 0);
-  //     const memberDiscount = Number(meta.memberDiscount || 0);
-  //     const totalDiscount =
-  //       meta.totalDiscount != null
-  //         ? Number(meta.totalDiscount)
-  //         : siblingDiscount + memberDiscount;
-
-  //     const finalPrice =
-  //       typeof booking.priceAtBooking === "number"
-  //         ? Number(booking.priceAtBooking)
-  //         : undefined;
-
-  //     const lastRefBase =
-  //       Array.isArray(booking.invoiceRefs) && booking.invoiceRefs.length
-  //         ? booking.invoiceRefs[booking.invoiceRefs.length - 1]?.basePrice
-  //         : undefined;
-
-  //     const basePrice =
-  //       typeof meta.basePrice === "number"
-  //         ? Number(meta.basePrice)
-  //         : typeof effInvoice.basePrice === "number"
-  //           ? Number(effInvoice.basePrice)
-  //           : typeof lastRefBase === "number"
-  //             ? Number(lastRefBase)
-  //             : finalPrice != null && Number.isFinite(totalDiscount)
-  //               ? Number(finalPrice) + Number(totalDiscount)
-  //               : undefined;
-
-  //     discount = {
-  //       basePrice,
-  //       siblingDiscount,
-  //       memberDiscount,
-  //       totalDiscount,
-  //       finalPrice,
-  //     };
-  //   }
-  // }
 
   let effectiveSingle;
   if (!weekly) {
@@ -668,13 +622,6 @@ async function buildParticipationPdfHTML({
     isCreditNote: byNo || byNegative,
   };
 
-  console.log("[PDF DEBUG bookingCtx.discount]", {
-    offerTitle: bookingCtx?.offerTitle,
-    offer: bookingCtx?.offer,
-    priceAtBooking: bookingCtx?.priceAtBooking,
-    discount: bookingCtx?.discount || null,
-  });
-
   const html = compileTemplate("participation", {
     brand,
     flags,
@@ -689,26 +636,324 @@ async function buildParticipationPdfHTML({
     invoice: effInvoice,
   });
 
-  console.log("[PDF HTML DEBUG voucher]", {
-    hasVoucherWord: html.includes("Gutschein"),
-    hasVoucherCode: html.includes(
-      String(bookingCtx?.discount?.voucherCode || ""),
-    ),
-    hasVoucherAmount: html.includes(
-      String(bookingCtx?.discount?.voucherDiscount || ""),
-    ),
-  });
-
-  const voucherIndex = html.indexOf("Gutschein");
-  console.log(
-    "[PDF HTML DEBUG snippet]",
-    voucherIndex >= 0
-      ? html.slice(Math.max(0, voucherIndex - 250), voucherIndex + 400)
-      : "NO_GUTSCHEIN_IN_HTML",
-  );
-
   return renderPdf(html);
 }
+
+// async function buildParticipationPdfHTML({
+//   customer,
+//   booking,
+//   offer,
+//   invoiceNo,
+//   invoiceDate,
+//   monthlyAmount,
+//   firstMonthAmount,
+//   venue,
+//   isWeekly,
+//   pricing,
+//   invoice,
+// }) {
+//   const brand = getBrand();
+
+//   const parent = { ...(customer?.parent || {}) };
+//   if (Object.prototype.hasOwnProperty.call(parent, "email"))
+//     delete parent.email;
+//   const child = { ...(customer?.child || {}) };
+
+//   const weekly =
+//     typeof isWeekly === "boolean" ? isWeekly : isWeeklyOffer(offer);
+
+//   const finalVenue = venue || booking?.venue || offer?.location || "";
+
+//   const title =
+//     booking?.offerTitle ||
+//     booking?.offerType ||
+//     booking?.offer ||
+//     offer?.sub_type ||
+//     offer?.title ||
+//     "-";
+
+//   function weekdayFromISO(iso) {
+//     if (!iso) return "";
+//     const d = new Date(/\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso}T00:00:00` : iso);
+//     if (Number.isNaN(d.getTime())) return "";
+//     return new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(d);
+//   }
+
+//   //teil2
+//   function timeRangeFromOffer(off, weekdayName = "") {
+//     if (!off) return "";
+//     const join = (f, t) =>
+//       [f, t]
+//         .filter(Boolean)
+//         .map(String)
+//         .map((s) => s.trim())
+//         .join(" – ");
+//     const norm = (v) => String(v || "").toLowerCase();
+//     const w = norm(weekdayName);
+
+//     if (Array.isArray(off.days) && off.days.length) {
+//       let cand =
+//         off.days.find(
+//           (d) =>
+//             norm(d?.day) === w || norm(d?.weekday) === w || norm(d?.tag) === w,
+//         ) || off.days[0];
+
+//       if (cand && typeof cand === "object") {
+//         const from =
+//           cand.timeFrom ??
+//           cand.from ??
+//           cand.start ??
+//           (cand.time && (cand.time.from ?? cand.timeStart));
+//         const to =
+//           cand.timeTo ??
+//           cand.to ??
+//           cand.end ??
+//           (cand.time && (cand.time.to ?? cand.timeEnd));
+//         if (from || to) return join(from, to);
+//         const t = cand.time ?? cand.zeit ?? cand.uhrzeit;
+//         if (t)
+//           return String(t)
+//             .replace(/\s*-\s*/g, " – ")
+//             .trim();
+//       }
+//     }
+
+//     const from = off.timeFrom ?? off.from ?? off.start;
+//     const to = off.timeTo ?? off.to ?? off.end;
+//     if (from || to) return join(from, to);
+//     const t = off.time ?? off.zeit ?? off.uhrzeit;
+//     return t
+//       ? String(t)
+//           .replace(/\s*-\s*/g, " – ")
+//           .trim()
+//       : "";
+//   }
+
+//   const bookingDate = booking?.date || booking?.createdAt || null;
+
+//   const derivedDay = weekly
+//     ? booking?.dayTimes ||
+//       booking?.kurstag ||
+//       booking?.weekday ||
+//       weekdayFromISO(bookingDate)
+//     : "";
+
+//   const derivedTime = weekly
+//     ? booking?.timeDisplay ||
+//       booking?.kurszeit ||
+//       booking?.time ||
+//       booking?.uhrzeit ||
+//       timeRangeFromOffer(offer, derivedDay)
+//     : "";
+
+//   const dayTimes = weekly ? derivedDay : "";
+//   const timeDisplay = weekly ? derivedTime : "";
+
+//   const effInvoice = { ...(invoice || {}) };
+//   const effPricing = { ...(pricing || {}) };
+
+//   if (invoiceNo && !effInvoice.number) effInvoice.number = invoiceNo;
+//   if (invoiceDate && !effInvoice.date) effInvoice.date = invoiceDate;
+
+//   if (weekly && typeof monthlyAmount === "number") {
+//     effInvoice.monthly = monthlyAmount;
+//     effPricing.monthly = monthlyAmount;
+//   }
+//   if (weekly && typeof firstMonthAmount === "number") {
+//     effInvoice.firstMonth = firstMonthAmount;
+//     effPricing.firstMonth = firstMonthAmount;
+//   }
+
+//   const currency = effInvoice.currency || effPricing.currency || "EUR";
+//   effInvoice.currency = currency;
+//   effPricing.currency = currency;
+
+//   let discount = null;
+
+//   if (!weekly && booking) {
+//     if (booking.discount) {
+//       discount = { ...booking.discount };
+//     } else {
+//       const meta =
+//         booking?.meta && typeof booking.meta === "object" ? booking.meta : {};
+
+//       const basePrice =
+//         typeof meta.basePrice === "number" ? Number(meta.basePrice) : undefined;
+
+//       const grossPrice =
+//         typeof meta.grossPrice === "number"
+//           ? Number(meta.grossPrice)
+//           : basePrice;
+
+//       const mainGoalkeeperSurcharge = Number(meta.mainGoalkeeperSurcharge || 0);
+//       const siblingGoalkeeperSurcharge = Number(
+//         meta.siblingGoalkeeperSurcharge || 0,
+//       );
+
+//       const goalkeeperTotal =
+//         meta.goalkeeperTotal != null
+//           ? Number(meta.goalkeeperTotal)
+//           : mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
+
+//       const siblingDiscount = Number(meta.siblingDiscount || 0);
+//       const mainMemberDiscount = Number(meta.mainMemberDiscount || 0);
+//       const siblingMemberDiscount = Number(meta.siblingMemberDiscount || 0);
+
+//       const memberDiscount =
+//         meta.memberDiscount != null
+//           ? Number(meta.memberDiscount)
+//           : mainMemberDiscount + siblingMemberDiscount;
+
+//       const voucherDiscount = Number(meta.voucherDiscount || 0);
+
+//       const totalDiscount =
+//         meta.totalDiscount != null
+//           ? Number(meta.totalDiscount)
+//           : siblingDiscount + memberDiscount + voucherDiscount;
+
+//       const finalPrice =
+//         typeof booking.priceAtBooking === "number"
+//           ? Number(booking.priceAtBooking)
+//           : grossPrice != null
+//             ? Number(grossPrice) - Number(totalDiscount)
+//             : undefined;
+
+//       discount = {
+//         basePrice,
+//         grossPrice,
+//         mainGoalkeeperSurcharge,
+//         siblingGoalkeeperSurcharge,
+//         goalkeeperTotal,
+//         siblingDiscount,
+//         mainMemberDiscount,
+//         siblingMemberDiscount,
+//         memberDiscount,
+//         voucherCode: String(meta.voucherCode || meta.voucher || "").trim(),
+//         voucherDiscount,
+//         totalDiscount,
+//         finalPrice,
+//       };
+//     }
+//     if (discount) {
+//       discount.voucherCode = String(discount.voucherCode || "").trim();
+//       discount.voucherDiscount = Number(discount.voucherDiscount || 0);
+//       discount.hasVoucher = Boolean(
+//         discount.voucherCode || discount.voucherDiscount > 0,
+//       );
+//       discount.voucherLabel = discount.voucherCode
+//         ? `Gutschein (${discount.voucherCode})`
+//         : "Gutschein";
+//     }
+//   }
+
+//   let effectiveSingle;
+//   if (!weekly) {
+//     if (
+//       discount?.finalPrice != null &&
+//       Number.isFinite(Number(discount.finalPrice))
+//     ) {
+//       effectiveSingle = Number(discount.finalPrice);
+//     } else if (
+//       effInvoice.single != null &&
+//       Number.isFinite(Number(effInvoice.single))
+//     ) {
+//       effectiveSingle = Number(effInvoice.single);
+//     } else if (
+//       effPricing.single != null &&
+//       Number.isFinite(Number(effPricing.single))
+//     ) {
+//       effectiveSingle = Number(effPricing.single);
+//     }
+
+//     if (effectiveSingle != null) {
+//       effInvoice.single = effectiveSingle;
+//       effPricing.single = effectiveSingle;
+//       if (
+//         discount &&
+//         (discount.finalPrice == null ||
+//           !Number.isFinite(Number(discount.finalPrice)))
+//       ) {
+//         discount.finalPrice = effectiveSingle;
+//       }
+//     }
+//   }
+
+//   const bookingCtx = {
+//     ...(booking || {}),
+//     offerTitle: title,
+//     date: booking?.date || "",
+//     status: booking?.status || "active",
+//     venue: finalVenue,
+//     offer: booking?.offer || title,
+//     dayTimes,
+//     timeDisplay,
+//   };
+
+//   if (discount) bookingCtx.discount = discount;
+
+//   const invNo = String(
+//     effInvoice.number ||
+//       invoiceNo ||
+//       booking?.invoiceNo ||
+//       booking?.invoiceNumber ||
+//       "",
+//   ).trim();
+
+//   const byNo = /^GS[-/]/i.test(invNo);
+
+//   const byNegative =
+//     (typeof booking?.priceAtBooking === "number" &&
+//       booking.priceAtBooking < 0) ||
+//     (typeof effInvoice.single === "number" && effInvoice.single < 0) ||
+//     (typeof effPricing.single === "number" && effPricing.single < 0);
+
+//   const flags = {
+//     isWeekly: weekly,
+//     isOneOff: !weekly,
+//     isCreditNote: byNo || byNegative,
+//   };
+
+//   // console.log("[PDF DEBUG bookingCtx.discount]", {
+//   //   offerTitle: bookingCtx?.offerTitle,
+//   //   offer: bookingCtx?.offer,
+//   //   priceAtBooking: bookingCtx?.priceAtBooking,
+//   //   discount: bookingCtx?.discount || null,
+//   // });
+
+//   const html = compileTemplate("participation", {
+//     brand,
+//     flags,
+//     customer: {
+//       userId: customer?.userId ?? "-",
+//       parent,
+//       child,
+//       address: customer?.address || {},
+//     },
+//     booking: bookingCtx,
+//     pricing: effPricing,
+//     invoice: effInvoice,
+//   });
+
+//   // console.log("[PDF HTML DEBUG voucher]", {
+//   //   hasVoucherWord: html.includes("Gutschein"),
+//   //   hasVoucherCode: html.includes(
+//   //     String(bookingCtx?.discount?.voucherCode || ""),
+//   //   ),
+//   //   hasVoucherAmount: html.includes(
+//   //     String(bookingCtx?.discount?.voucherDiscount || ""),
+//   //   ),
+//   // });
+
+//   // const voucherIndex = html.indexOf("Gutschein");
+//   // console.log(
+//   //   "[PDF HTML DEBUG snippet]",
+//   //   voucherIndex >= 0
+//   //     ? html.slice(Math.max(0, voucherIndex - 250), voucherIndex + 400)
+//   //     : "NO_GUTSCHEIN_IN_HTML",
+//   // );
+
+//   return renderPdf(html);
+// }
 
 async function buildCancellationPdfHTML({
   customer,
@@ -758,6 +1003,7 @@ async function buildCancellationPdfHTML({
     normBooking.originalInvoiceDate ||
     normBooking.invoiceDate ||
     "";
+
   const refInvoiceDateDE = toDEDate(refInvoiceDate);
 
   const html = compileTemplate("cancellation", {
@@ -774,7 +1020,6 @@ async function buildCancellationPdfHTML({
         normBooking.offerType ||
         normBooking.offer ||
         "-",
-
       offerType: normBooking.offerType || "",
       offer: normBooking.offer || "",
       venue: normBooking.venue || "",
@@ -791,6 +1036,7 @@ async function buildCancellationPdfHTML({
       reason: reason || normBooking.cancelReason || "",
     },
   });
+
   return renderPdf(html);
 }
 
@@ -869,6 +1115,9 @@ async function buildStornoPdfHTML({
       refInvoiceNo,
       refInvoiceDate,
       refInvoiceDateDE,
+
+      priceAtBooking: normBooking.priceAtBooking,
+      discount: normBooking.discount || null,
     },
     amount: amountNum,
     currency: curr,
@@ -906,11 +1155,22 @@ function bookingDocNo(booking = {}) {
 }
 
 function bookingBaseAmount(booking = {}) {
+  const meta =
+    booking?.meta && typeof booking.meta === "object" ? booking.meta : {};
+
   const candidates = [
     booking?.priceAtBooking,
+    booking?.discount?.finalPrice,
+    meta?.finalPrice,
     booking?.stornoAmount,
     booking?.amount,
   ];
+
+  // const candidates = [
+  //   booking?.priceAtBooking,
+  //   booking?.stornoAmount,
+  //   booking?.amount,
+  // ];
 
   for (const v of candidates) {
     const n = Number(v);
