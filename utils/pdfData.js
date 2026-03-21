@@ -18,6 +18,63 @@ function toISODate(d) {
   return Number.isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
 }
 
+function buildDiscountSnapshot(booking = {}, offer = {}) {
+  const meta = booking && booking.meta ? booking.meta : {};
+
+  const basePrice = toNum(meta.basePrice);
+  const grossPrice = toNum(meta.grossPrice) ?? basePrice ?? toNum(offer?.price);
+
+  const mainGoalkeeperSurcharge = toNum(meta.mainGoalkeeperSurcharge) || 0;
+  const siblingGoalkeeperSurcharge =
+    toNum(meta.siblingGoalkeeperSurcharge) || 0;
+
+  const goalkeeperTotal =
+    toNum(meta.goalkeeperTotal) ??
+    mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
+
+  const siblingDiscount = toNum(meta.siblingDiscount) || 0;
+  const mainMemberDiscount = toNum(meta.mainMemberDiscount) || 0;
+  const siblingMemberDiscount = toNum(meta.siblingMemberDiscount) || 0;
+
+  const memberDiscount =
+    toNum(meta.memberDiscount) ?? mainMemberDiscount + siblingMemberDiscount;
+
+  const voucherDiscount = toNum(meta.voucherDiscount) || 0;
+
+  const totalDiscount =
+    toNum(meta.totalDiscount) ??
+    siblingDiscount + memberDiscount + voucherDiscount;
+
+  const finalPrice =
+    booking?.priceAtBooking != null &&
+    Number.isFinite(Number(booking.priceAtBooking))
+      ? Number(booking.priceAtBooking)
+      : grossPrice != null
+        ? grossPrice - totalDiscount
+        : null;
+
+  return {
+    basePrice,
+    grossPrice,
+    mainGoalkeeperSurcharge,
+    siblingGoalkeeperSurcharge,
+    goalkeeperTotal,
+    siblingDiscount,
+    mainMemberDiscount,
+    siblingMemberDiscount,
+    memberDiscount,
+    voucherCode: safeText(meta.voucherCode || meta.voucher),
+    voucherDiscount,
+    totalDiscount,
+    finalPrice,
+  };
+}
+
+function discountedBookingAmount(booking = {}, offer = {}) {
+  const discount = buildDiscountSnapshot(booking, offer);
+  return discount.finalPrice != null ? Number(discount.finalPrice) : null;
+}
+
 function sanitizeCourseTitle(raw) {
   if (!raw) return "";
   let s = String(raw).trim();
@@ -203,25 +260,59 @@ function shapeStornoData({
   amount,
   currency = "EUR",
 }) {
+  const discount = buildDiscountSnapshot(booking, offer);
+  const discountedAmount = discountedBookingAmount(booking, offer);
+
   let amt;
   if (
     amount === undefined ||
     amount === null ||
     (typeof amount === "string" && amount.trim() === "")
   ) {
-    amt = undefined;
+    amt = discountedAmount ?? undefined;
   } else {
     const n = Number(amount);
-    amt = Number.isFinite(n) ? n : undefined;
+    amt = Number.isFinite(n) ? n : (discountedAmount ?? undefined);
   }
 
   return {
     customer: shapeCustomer(customer, booking),
-    booking: shapeBooking(booking, offer),
+    booking: {
+      ...shapeBooking(booking, offer),
+      discount,
+      priceAtBooking: discountedAmount,
+    },
     amount: amt,
     currency,
   };
 }
+
+// function shapeStornoData({
+//   customer,
+//   booking,
+//   offer,
+//   amount,
+//   currency = "EUR",
+// }) {
+//   let amt;
+//   if (
+//     amount === undefined ||
+//     amount === null ||
+//     (typeof amount === "string" && amount.trim() === "")
+//   ) {
+//     amt = undefined;
+//   } else {
+//     const n = Number(amount);
+//     amt = Number.isFinite(n) ? n : undefined;
+//   }
+
+//   return {
+//     customer: shapeCustomer(customer, booking),
+//     booking: shapeBooking(booking, offer),
+//     amount: amt,
+//     currency,
+//   };
+// }
 
 function shapeCancellationData({
   customer,
@@ -257,7 +348,6 @@ function shapeCancellationData({
 
         const targetY = m === 11 ? y + 1 : y;
         const targetM = (m + 1) % 12;
-
         const lastDayTargetMonth = new Date(targetY, targetM + 1, 0).getDate();
         const targetDay = Math.min(day, lastDayTargetMonth);
 
@@ -278,6 +368,99 @@ function shapeCancellationData({
     },
   };
 }
+// function shapeParticipationData({ customer, booking, offer }) {
+//   const shapedCustomer = shapeCustomer(customer, booking);
+//   const shapedBooking = shapeBooking(booking, offer);
+
+//   const rawOffer =
+//     booking?.offer != null && String(booking.offer).trim() !== ""
+//       ? String(booking.offer)
+//       : "";
+
+//   const cleanOffer = sanitizeCourseTitle(
+//     rawOffer ||
+//       shapedBooking.offerTitle ||
+//       shapedBooking.offerType ||
+//       offer?.title ||
+//       "",
+//   );
+
+//   const dayTimes =
+//     booking?.dayTimes || booking?.kurstag || booking?.weekday || "";
+
+//   const timeDisplay =
+//     booking?.timeDisplay ||
+//     booking?.kurszeit ||
+//     booking?.time ||
+//     booking?.uhrzeit ||
+//     "";
+
+//   //const meta = booking && booking.meta ? booking.meta : {};
+
+//   const basePrice = toNum(meta.basePrice);
+//   const grossPrice = toNum(meta.grossPrice);
+
+//   const mainGoalkeeperSurcharge = toNum(meta.mainGoalkeeperSurcharge) || 0;
+//   const siblingGoalkeeperSurcharge =
+//     toNum(meta.siblingGoalkeeperSurcharge) || 0;
+//   const goalkeeperTotal =
+//     toNum(meta.goalkeeperTotal) ??
+//     mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
+
+//   const siblingDiscount = toNum(meta.siblingDiscount) || 0;
+//   const mainMemberDiscount = toNum(meta.mainMemberDiscount) || 0;
+//   const siblingMemberDiscount = toNum(meta.siblingMemberDiscount) || 0;
+//   const memberDiscount =
+//     toNum(meta.memberDiscount) ?? mainMemberDiscount + siblingMemberDiscount;
+
+//   const voucherDiscount = toNum(meta.voucherDiscount) || 0;
+
+//   const totalDiscount =
+//     toNum(meta.totalDiscount) ??
+//     siblingDiscount + memberDiscount + voucherDiscount;
+
+//   const finalPrice =
+//     booking?.priceAtBooking != null &&
+//     Number.isFinite(Number(booking.priceAtBooking))
+//       ? Number(booking.priceAtBooking)
+//       : grossPrice != null
+//         ? grossPrice - totalDiscount
+//         : null;
+
+//   const discount = buildDiscountSnapshot(booking, offer);
+
+//   // const discount = {
+//   //   basePrice,
+//   //   grossPrice,
+//   //   mainGoalkeeperSurcharge,
+//   //   siblingGoalkeeperSurcharge,
+//   //   goalkeeperTotal,
+//   //   siblingDiscount,
+//   //   mainMemberDiscount,
+//   //   siblingMemberDiscount,
+//   //   memberDiscount,
+//   //   voucherCode: safeText(meta.voucherCode || meta.voucher),
+//   //   voucherDiscount,
+//   //   totalDiscount,
+//   //   finalPrice,
+//   // };
+
+//   return {
+//     customer: shapedCustomer,
+//     booking: {
+//       ...shapedBooking,
+
+//       offer:
+//         rawOffer || shapedBooking.offerTitle || shapedBooking.offerType || "",
+
+//       offerClean: cleanOffer,
+
+//       dayTimes,
+//       timeDisplay,
+//       discount,
+//     },
+//   };
+// }
 
 function shapeParticipationData({ customer, booking, offer }) {
   const shapedCustomer = shapeCustomer(customer, booking);
@@ -306,70 +489,78 @@ function shapeParticipationData({ customer, booking, offer }) {
     booking?.uhrzeit ||
     "";
 
-  const meta = booking && booking.meta ? booking.meta : {};
-
-  const basePrice = toNum(meta.basePrice);
-  const grossPrice = toNum(meta.grossPrice);
-
-  const mainGoalkeeperSurcharge = toNum(meta.mainGoalkeeperSurcharge) || 0;
-  const siblingGoalkeeperSurcharge =
-    toNum(meta.siblingGoalkeeperSurcharge) || 0;
-  const goalkeeperTotal =
-    toNum(meta.goalkeeperTotal) ??
-    mainGoalkeeperSurcharge + siblingGoalkeeperSurcharge;
-
-  const siblingDiscount = toNum(meta.siblingDiscount) || 0;
-  const mainMemberDiscount = toNum(meta.mainMemberDiscount) || 0;
-  const siblingMemberDiscount = toNum(meta.siblingMemberDiscount) || 0;
-  const memberDiscount =
-    toNum(meta.memberDiscount) ?? mainMemberDiscount + siblingMemberDiscount;
-
-  const voucherDiscount = toNum(meta.voucherDiscount) || 0;
-
-  const totalDiscount =
-    toNum(meta.totalDiscount) ??
-    siblingDiscount + memberDiscount + voucherDiscount;
-
-  const finalPrice =
-    booking?.priceAtBooking != null &&
-    Number.isFinite(Number(booking.priceAtBooking))
-      ? Number(booking.priceAtBooking)
-      : grossPrice != null
-        ? grossPrice - totalDiscount
-        : null;
-
-  const discount = {
-    basePrice,
-    grossPrice,
-    mainGoalkeeperSurcharge,
-    siblingGoalkeeperSurcharge,
-    goalkeeperTotal,
-    siblingDiscount,
-    mainMemberDiscount,
-    siblingMemberDiscount,
-    memberDiscount,
-    voucherCode: safeText(meta.voucherCode || meta.voucher),
-    voucherDiscount,
-    totalDiscount,
-    finalPrice,
-  };
+  const discount = buildDiscountSnapshot(booking, offer);
 
   return {
     customer: shapedCustomer,
     booking: {
       ...shapedBooking,
-
       offer:
         rawOffer || shapedBooking.offerTitle || shapedBooking.offerType || "",
-
       offerClean: cleanOffer,
-
       dayTimes,
       timeDisplay,
       discount,
     },
   };
 }
+
+// function shapeDunningData({
+//   customer,
+//   booking,
+//   stage,
+//   issuedAt,
+//   dueAt,
+//   feeSnapshot,
+//   freeText,
+// } = {}) {
+//   const shapedCustomer = shapeCustomer(customer, booking);
+//   const shapedBooking = shapeBooking(booking, {});
+//   const discount = buildDiscountSnapshot(booking, {});
+
+//   const fees = feeSnapshot || {};
+
+//   const baseAmount =
+//     booking?.status === "storno" && booking?.stornoAmount != null
+//       ? Number(booking.stornoAmount) || 0
+//       : discountedBookingAmount(booking, {}) || 0;
+
+//   const returnBankFee = Number(fees.returnBankFee || 0) || 0;
+//   const dunningFee = Number(fees.dunningFee || 0) || 0;
+//   const processingFee = Number(fees.processingFee || 0) || 0;
+
+//   const computedExtraFees = returnBankFee + dunningFee + processingFee;
+//   const totalExtraFees =
+//     fees.totalExtraFees != null
+//       ? Number(fees.totalExtraFees) || 0
+//       : computedExtraFees;
+
+//   const totalDue = baseAmount + totalExtraFees;
+
+//   return {
+//     customer: shapedCustomer,
+//     booking: {
+//       ...shapedBooking,
+//       discount,
+//       priceAtBooking: baseAmount,
+//     },
+//     dunning: {
+//       stage: String(stage || "reminder"),
+//       issuedAt: toISODate(issuedAt || new Date()),
+//       dueAt: toISODate(dueAt || ""),
+//       freeText: String(freeText || "").trim(),
+//     },
+//     amounts: {
+//       baseAmount,
+//       returnBankFee,
+//       dunningFee,
+//       processingFee,
+//       totalExtraFees,
+//       totalDue,
+//       currency: String(fees.currency || booking?.currency || "EUR"),
+//     },
+//   };
+// }
 
 function shapeDunningData({
   customer,
@@ -551,6 +742,19 @@ function shapeWeeklyContractData({ booking, offer } = {}) {
   };
 }
 
+// module.exports = {
+//   toISODate,
+//   sanitizeCourseTitle,
+//   normalizeInvoiceNo,
+//   shapeCustomer,
+//   shapeBooking,
+//   shapeStornoData,
+//   shapeCancellationData,
+//   shapeParticipationData,
+//   shapeDunningData,
+//   shapeWeeklyContractData,
+// };
+
 module.exports = {
   toISODate,
   sanitizeCourseTitle,
@@ -562,4 +766,6 @@ module.exports = {
   shapeParticipationData,
   shapeDunningData,
   shapeWeeklyContractData,
+  buildDiscountSnapshot,
+  discountedBookingAmount,
 };
