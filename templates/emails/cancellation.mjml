@@ -1,4 +1,3 @@
-
 <mjml>
   <mj-head>
     <mj-attributes>
@@ -8,8 +7,13 @@
       <mj-divider border-color="#e5e7eb" border-width="1px" />
     </mj-attributes>
     <mj-style inline="inline">
-      .muted { color:#6b7280; }
-      .link { color:#0f172a; text-decoration:none; }
+      .muted {
+        color: #6b7280;
+      }
+      .link {
+        color: #0f172a;
+        text-decoration: none;
+      }
     </mj-style>
   </mj-head>
 
@@ -17,9 +21,20 @@
     <!-- Header -->
     <mj-section background-color="#3e6294" padding="12px 24px">
       <mj-column vertical-align="middle">
-        <mj-image width="110px" src="{{brand.logoUrl}}" alt="{{brand.company}}" padding="0 0 6px 0" />
-        <mj-text font-size="20px" font-weight="700" align="center" padding="0" color="#ffffff">
-          {{brand.company}}
+        <mj-image
+          width="110px"
+          src="{{brand.logoUrl}}"
+          alt="{{brand.company}}"
+          padding="0 0 6px 0"
+        />
+        <mj-text
+          font-size="20px"
+          font-weight="700"
+          align="center"
+          padding="0"
+          color="#ffffff"
+        >
+          {{ brand.company }}
         </mj-text>
       </mj-column>
     </mj-section>
@@ -33,11 +48,11 @@
     <mj-section background-color="#ffffff" padding="12px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px">
-          Hallo {{greetingName}}.
+          Hallo {{ greetingName }}.
         </mj-text>
         <mj-spacer height="10px" />
         <mj-text font-size="16px" line-height="24px" padding="0 24px">
-          {{infoLine}}
+          {{ infoLine }}
         </mj-text>
       </mj-column>
     </mj-section>
@@ -46,36 +61,44 @@
     <mj-section background-color="#ffffff" padding="16px 0 0">
       <mj-column>
         <mj-text font-size="16px" font-weight="700" padding="0 24px">
-          {{headline}}
+          {{ headline }}
         </mj-text>
       </mj-column>
     </mj-section>
 
-   
-
     <!-- Nummernblock (Kündigungs-Nr. / Zur Rechnung / Kunden-Nr. / Datum) -->
-<mj-section background-color="#ffffff" padding="6px 0 0">
-  <mj-column>
-    <mj-text padding="0 24px">
-      {{#if cancellation.number}}<b>Kündigungs-Nr.:</b> {{cancellation.number}}<br/>{{/if}}
-      {{#if reference.invoiceNo}}
-        <b>Zur Rechnung:</b> {{reference.invoiceNo}}{{#if reference.invoiceDate}} vom {{reference.invoiceDate}}{{/if}}<br/>
-      {{/if}}
-      {{#if customer.userId}}<b>Kunden-Nr.:</b> {{customer.userId}}<br/>{{/if}}
-      {{#if cancellation.date}}<b>Datum:</b> {{cancellation.date}} <b>zum</b> {{cancellation.endDate}}<br/>{{/if}} 
-      
-    </mj-text>
-  </mj-column>
-</mj-section>
+    <mj-section background-color="#ffffff" padding="6px 0 0">
+      <mj-column>
+        <mj-text padding="0 24px">
+          {{#if cancellation.number}}<b>Kündigungs-Nr.:</b>
+          {{ cancellation.number }}<br />{{/if}}
+          {{#if reference.invoiceNo}}
+          <b>Zur Rechnung:</b> {{ reference.invoiceNo
+          }}{{#if reference.invoiceDate}} vom {{ reference.invoiceDate
+          }}{{/if
 
+
+
+
+          }}<br />
+          {{/if}}
+          {{#if customer.userId}}<b>Kunden-Nr.:</b> {{ customer.userId
+          }}<br />{{/if}} {{#if cancellation.date}}<b>Datum:</b>
+          {{ cancellation.date }} <b>zum</b> {{ cancellation.endDate
+          }}<br />{{/if}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
 
     <!-- Textabsatz 1: Bedauern -->
     <mj-section background-color="#ffffff" padding="14px 0 0">
       <mj-column>
         <mj-text padding="0 24px">
           Wir bedauern, dass Sie unser Angebot
-          <strong>{{courseOnly booking.offer}}</strong><br/>
-          am Veranstaltungsort <strong>{{booking.venue}}</strong> nicht mehr nutzen möchten.
+          <strong>{{courseOnly booking.offer}}</strong
+          ><br />
+          am Veranstaltungsort <strong>{{ booking.venue }}</strong> nicht mehr
+          nutzen möchten.
         </mj-text>
       </mj-column>
     </mj-section>
@@ -85,7 +108,9 @@
       <mj-column>
         <mj-text padding="0 24px">
           Hiermit bestätigen wir den Erhalt Ihrer Kündigung.
-          {{#if details.reason}}<br/><span class="muted">Grund: {{details.reason}}</span>{{/if}}
+          {{#if details.reason}}<br /><span class="muted"
+            >Grund: {{ details.reason }}</span
+          >{{/if}}
         </mj-text>
       </mj-column>
     </mj-section>
@@ -103,22 +128,39 @@
     <mj-section background-color="#ffffff" padding="20px 0 0">
       <mj-column>
         <mj-text font-size="16px" line-height="24px" padding="0 24px 8px">
-          {{signature.signoff}},<br/>{{signature.name}}<br/>
-          <strong>Dein Trainer-Team</strong><br/>
+          {{ signature.signoff }},<br />{{ signature.name }}<br />
+          <strong>Dein Trainer-Team</strong><br />
         </mj-text>
         <mj-divider />
       </mj-column>
     </mj-section>
 
-
-     <!-- Social-Links nebeneinander -->
+    <!-- Social-Links nebeneinander -->
     <mj-section background-color="#ffffff" padding="8px 0 0">
       <mj-column>
-        <mj-social align="center" mode="horizontal" icon-size="22px" inner-padding="8px 6px" text-mode="hidden">
-          <mj-social-element name="facebook" href="https://www.facebook.com/muenchner.fussball.schule.ruhr" />
-          <mj-social-element name="instagram" href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de" />
-          <mj-social-element name="web" href="https://www.tiktok.com/@mfs_fussballtraining_nrw?" />
-          <mj-social-element name="youtube" href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA" />
+        <mj-social
+          align="center"
+          mode="horizontal"
+          icon-size="22px"
+          inner-padding="8px 6px"
+          text-mode="hidden"
+        >
+          <mj-social-element
+            name="facebook"
+            href="https://www.facebook.com/muenchner.fussball.schule.ruhr"
+          />
+          <mj-social-element
+            name="instagram"
+            href="https://www.instagram.com/mfs_fussballtraining_nrw/?hl=de"
+          />
+          <mj-social-element
+            name="web"
+            href="https://www.tiktok.com/@mfs_fussballtraining_nrw?"
+          />
+          <mj-social-element
+            name="youtube"
+            href="https://www.youtube.com/channel/UCuc5Z8ExCPkXIgW_62WOCUA"
+          />
         </mj-social>
       </mj-column>
     </mj-section>
@@ -126,30 +168,54 @@
     <!-- Footer -->
     <mj-section background-color="#f1f5f9" padding="0 0 16px 0">
       <mj-column>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="12px 24px 0">
-          © 2025, {{brand.company}} – alle Rechte vorbehalten.
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="12px 24px 0"
+        >
+          © 2025, {{ brand.company }} – alle Rechte vorbehalten.
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
-          {{brand.addr1}}<br/>{{brand.addr2}}
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
+          {{ brand.addr1 }}<br />{{ brand.addr2 }}
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
           Telefon: <a href="tel:+4917643203362" class="link">0176 4320 3362</a>
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 0">
-          E-Mail: <a href="mailto:{{brand.email}}" class="link">{{brand.email}}</a>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 0"
+        >
+          E-Mail:
+          <a href="mailto:{{brand.email}}" class="link">{{ brand.email }}</a>
         </mj-text>
-        <mj-text font-size="13px" color="#6b7280" align="center" line-height="20px" padding="4px 24px 8px">
-          Website: <a href="{{brand.website}}" class="link">{{brand.website}}</a>
+        <mj-text
+          font-size="13px"
+          color="#6b7280"
+          align="center"
+          line-height="20px"
+          padding="4px 24px 8px"
+        >
+          Website:
+          <a href="{{brand.website}}" class="link">{{ brand.website }}</a>
         </mj-text>
       </mj-column>
     </mj-section>
   </mj-body>
 </mjml>
-
-
-
-
-
-
-
-
