@@ -1360,14 +1360,14 @@ async function sendParticipationEmail({
     { filename: "Teilnahmebestaetigung.pdf", content: ensureBuf },
   ];
 
-  console.log(
-    "[sendParticipationEmail] html has revoke text:",
-    html.includes("Vertrag widerrufen"),
-  );
-  console.log(
-    "[sendParticipationEmail] html has revoke url:",
-    html.includes(revocationUrl),
-  );
+  // console.log(
+  //   "[sendParticipationEmail] html has revoke text:",
+  //   html.includes("Vertrag widerrufen"),
+  // );
+  // console.log(
+  //   "[sendParticipationEmail] html has revoke url:",
+  //   html.includes(revocationUrl),
+  // );
 
   await sendMail({
     to,
