@@ -779,18 +779,6 @@ async function buildInvoiceList({
     BillingDocument,
   });
 
-  console.log(
-    "[adminInvoices][recurringRows]",
-    recurringInvoiceRows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      invoiceNo: r.invoiceNo,
-      bookingId: r.bookingId,
-      customerId: r.customerId,
-      title: r.title,
-    })),
-  );
-
   const all = [];
 
   for (const c of customers) {
@@ -913,12 +901,6 @@ async function buildInvoiceList({
           r.handedOverAt = null;
           r.handedOverNote = "";
         }
-        console.log("[adminInvoices][pushRecurring]", {
-          id: r.id,
-          type: r.type,
-          invoiceNo: r.invoiceNo,
-          q,
-        });
 
         all.push(r);
       }
@@ -953,32 +935,21 @@ async function buildInvoiceList({
       }
     }
 
-    console.log("[adminInvoices][recurring-check]", {
-      id: r.id,
-      type: rowType,
-      invoiceNo: r.invoiceNo,
-      q,
-      typeStr,
-      typeSet: [...typeSet],
-      hasType,
-      matchesQ,
-      inRange,
-      issuedAt: r.issuedAt,
-    });
-
     if (!hasType) continue;
     if (!matchesQ) continue;
     if (!inRange) continue;
 
-    console.log("[adminInvoices][pushRecurring]", {
-      id: r.id,
-      invoiceNo: r.invoiceNo,
-    });
-
     all.push(r);
   }
 
+  // let filtered = filterBySelectedIds(all, selectedIds);
+
+  // filtered.sort((a, b) => {
   let filtered = filterBySelectedIds(all, selectedIds);
+
+  filtered = Array.from(
+    new Map(filtered.map((item) => [String(item.id || ""), item])).values(),
+  );
 
   filtered.sort((a, b) => {
     if (sort.field === "issuedAt") {
