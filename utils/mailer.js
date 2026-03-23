@@ -1,7 +1,5 @@
-// // utils/mailer.js
 // utils/mailer.js
 
-//teil1
 "use strict";
 
 const fs = require("fs");
@@ -34,7 +32,6 @@ const {
   websiteBaseUrl,
 } = require("./mailer/revocationLinks");
 
-/* ================= Transport ================= */
 let transporter;
 function getTransporter() {
   if (!transporter) {
@@ -54,7 +51,6 @@ function getTransporter() {
   return transporter;
 }
 
-/* ================= Helpers ================= */
 const fileExists = (p) => {
   try {
     return fs.existsSync(p);
@@ -229,7 +225,7 @@ async function sendBookingAckEmail({
   const ctx = {
     brand: { ...brand, logoUrl },
     title: "Eingangsbestätigung deiner Buchungsanfrage",
-    // greetingName: booking.firstName || "Sportler",
+
     greetingName: parentGreetingNameFromBooking(booking),
     summary: {
       offer: courseOnly(rawOffer),
@@ -470,7 +466,6 @@ async function sendPasswordResetMail(to, resetLink) {
   });
 }
 
-//teil2
 async function sendStornoEmail({
   to,
   customer,
@@ -556,6 +551,10 @@ async function sendStornoEmail({
     greetingName: fullName(shaped.customer.parent) || "Kunde",
     headline: "Storno-Rechnung",
     note: "Wir bestätigen die Stornierung. Die Storno-Rechnung findest du im Anhang.",
+    booking: {
+      ...shaped.booking,
+      discount: shaped.booking?.discount || null,
+    },
     invoice: {
       invoiceNo: stornoNo,
       invoiceDate: new Date(
@@ -572,6 +571,7 @@ async function sendStornoEmail({
       total: eur(effectiveAmount, shaped.currency),
       refInvoiceNo,
       refInvoiceDate: refInvoiceDateDE || refInvoiceDate,
+      isCorrection: true,
     },
     signature,
     legal: {
@@ -1213,8 +1213,6 @@ async function sendParticipationEmail({
     booking?.preferredTime ||
     "";
 
-  //teil3
-
   function findTimeRangeFromOffer(off, weekdayName) {
     if (!off) return "";
 
@@ -1359,15 +1357,6 @@ async function sendParticipationEmail({
     ...(logoAttachment ? [logoAttachment] : []),
     { filename: "Teilnahmebestaetigung.pdf", content: ensureBuf },
   ];
-
-  // console.log(
-  //   "[sendParticipationEmail] html has revoke text:",
-  //   html.includes("Vertrag widerrufen"),
-  // );
-  // console.log(
-  //   "[sendParticipationEmail] html has revoke url:",
-  //   html.includes(revocationUrl),
-  // );
 
   await sendMail({
     to,
@@ -1527,7 +1516,7 @@ async function sendBookingConfirmedEmail({
   const ctx = {
     brand: { ...brand, logoUrl },
     title: "Terminbestätigung",
-    //greetingName: booking.firstName || "Sportler",
+
     greetingName: parentGreetingNameFromBooking(booking),
     revocationUrl,
     booking: {
@@ -1600,7 +1589,6 @@ async function sendDunningEmail({
     return "Mahnung";
   }
 
-  //teil3
   function bookingDocNoLocal(doc = {}) {
     return String(
       doc?.invoiceNo ||
@@ -1973,8 +1961,6 @@ async function sendDunningVoidedEmail({ owner, billingDocument, reason }) {
   });
 }
 
-//neu
-
 async function sendWeeklyContractStartEmail({ to, booking, offer, token }) {
   if (!to || !booking || !token) return;
 
@@ -1988,8 +1974,6 @@ async function sendWeeklyContractStartEmail({ to, booking, offer, token }) {
     process.env.BRAND_WEBSITE_URL ||
     "http://localhost:3000";
 
-  //const actionUrl = `${String(base).replace(/\/+$/, "")}/weekly/start?token=${encodeURIComponent(token)}`;
-
   const actionUrl = `${String(base).replace(/\/+$/, "")}/weekly/contract?token=${encodeURIComponent(token)}`;
 
   const programLabel = buildProgramLabel(offer, booking);
@@ -1997,7 +1981,7 @@ async function sendWeeklyContractStartEmail({ to, booking, offer, token }) {
   const ctx = {
     brand: { ...brand, logoUrl },
     title: "Zulassung – Vertrag unterschreiben & Abo starten",
-    // greetingName: booking.firstName || "Sportler",
+
     greetingName: parentGreetingNameFromBooking(booking),
     intro:
       "Super – du bist zugelassen. Bitte unterschreibe jetzt den Vertrag. Danach wirst du direkt zur sicheren Zahlung (Abo) weitergeleitet.",
@@ -2051,7 +2035,7 @@ async function sendWeeklyContractSignedEmail({
   const ctx = {
     brand: { ...brand, logoUrl },
     title: "Vertrag unterschrieben",
-    //greetingName: booking?.firstName || "Sportler",
+
     greetingName: parentGreetingNameFromBooking(booking),
     intro:
       "Vielen Dank. Dein Vertrag wurde digital unterschrieben. Den Vertrag findest du als PDF im Anhang.",
@@ -2111,7 +2095,7 @@ async function sendOneTimePaymentLinkEmail({ to, booking, offer, bookingId }) {
     brand: { ...brand, logoUrl },
     title: "Zahlung freigegeben – jetzt sicher bezahlen",
     greetingName: parentGreetingNameFromBooking(booking),
-    // greetingName: booking.firstName || "Sportler",
+
     intro:
       "Super – deine Zahlung wurde freigegeben. Bitte nutze jetzt den Link, um die Einmalzahlung sicher über Stripe abzuschließen.",
     booking: {
@@ -2158,18 +2142,13 @@ async function sendWeeklySubscriptionActiveEmail({
 
   const programLabel = buildProgramLabel(offer, booking);
 
-  // const tokenData = await ensureRevocationLink(booking);
-  // const base = websiteBaseUrl();
-
-  // const fallbackRevocationUrl = `${String(base).replace(/\/+$/, "")}/widerrufen/`;
-
   const tokenData = await ensureRevocationLink(booking);
 
   const ctx = {
     brand: { ...brand, logoUrl },
     title: "Abo aktiv – Teilnahme bestätigt",
     greetingName: parentGreetingNameFromBooking(booking),
-    // greetingName: booking?.firstName || "Sportler",
+
     intro:
       "Dein Abo ist jetzt aktiv. Deine Teilnahme ist bestätigt. Über den folgenden Link kannst du dein Abo kündigen.",
     booking: {
@@ -2177,9 +2156,9 @@ async function sendWeeklySubscriptionActiveEmail({
       date: booking?.date || "",
       code: booking?.confirmationCode || "",
     },
-    // revocationUrl: revocationUrl || fallbackRevocationUrl,
+
     revocationUrl: tokenData.revocationUrl || "",
-    // revocationUrl: tokenData.revocationUrl || fallbackRevocationUrl,
+
     ctaText: "Abo kündigen",
     actionUrl: cancelUrl,
     note: "Die Kündigung erfolgt gemäß deiner Vertragsbedingungen automatisch zum hinterlegten Kündigungstermin.",

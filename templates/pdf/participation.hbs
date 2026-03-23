@@ -121,7 +121,40 @@
         <td class="amt"></td>
       </tr>
 
-      {{#if flags.isWeekly}}
+      {{#if flags.isCreditNote}}
+      <tr>
+        <td class="desc"><strong>Gutschrift / Rückerstattung</strong></td>
+        <td class="amt">
+          {{#if booking.discount.finalPrice}}
+          {{fmtMoney booking.discount.finalPrice invoice.currency}}
+          {{else if invoice.single}}
+          {{fmtMoney invoice.single invoice.currency}}
+          {{else if pricing.single}}
+          {{fmtMoney pricing.single pricing.currency}}
+          {{else}}
+          {{fmtMoney booking.priceAtBooking invoice.currency}}
+          {{/if}}
+        </td>
+      </tr>
+
+      {{#if booking.discount}}
+      {{#if booking.discount.hasVoucher}}
+      <tr>
+        <td class="desc muted small">
+          Hinweis: Die ursprüngliche Rechnung wurde
+          {{#if booking.discount.voucherCode}}
+          unter Berücksichtigung des Gutscheins ({{booking.discount.voucherCode}})
+          {{else}}
+          unter Berücksichtigung eines Gutscheins
+          {{/if}}
+          erstellt.
+        </td>
+        <td class="amt"></td>
+      </tr>
+      {{/if}}
+      {{/if}}
+
+      {{else if flags.isWeekly}}
       <tr>
         <td class="desc">Regelmäßige monatliche Teilnahmegebühr</td>
         <td class="amt">
@@ -192,40 +225,7 @@
       {{/if}}
 
       {{else}}
-      {{#if flags.isCreditNote}}
-      <tr>
-        <td class="desc"><strong>Gutschrift / Rückerstattung</strong></td>
-        <td class="amt">
-          {{#if booking.discount.finalPrice}}
-          {{fmtMoney booking.discount.finalPrice invoice.currency}}
-          {{else if invoice.single}}
-          {{fmtMoney invoice.single invoice.currency}}
-          {{else if pricing.single}}
-          {{fmtMoney pricing.single pricing.currency}}
-          {{else}}
-          {{fmtMoney booking.priceAtBooking invoice.currency}}
-          {{/if}}
-        </td>
-      </tr>
-
       {{#if booking.discount}}
-      {{#if booking.discount.voucherDiscount}}
-      <tr>
-        <td class="desc muted small">
-          Hinweis: Die ursprüngliche Rechnung wurde
-          {{#if booking.discount.voucherCode}}
-          unter Berücksichtigung des Gutscheins ({{booking.discount.voucherCode}})
-          {{else}}
-          unter Berücksichtigung eines Gutscheins
-          {{/if}}
-          erstellt.
-        </td>
-        <td class="amt"></td>
-      </tr>
-      {{/if}}
-      {{/if}}
-
-      {{else if booking.discount}}
       <tr>
         <td class="desc muted small">
           Dieses Angebot beinhaltet folgende Preisbestandteile und Rabatte:
@@ -338,7 +338,7 @@
       {{else}}
       <tr>
         <td class="desc">
-          <strong>{{#if flags.isCreditNote}}Gutschriftbetrag{{else}}Die Teilnahmegebühr beträgt{{/if}}</strong>
+          <strong>Die Teilnahmegebühr beträgt</strong>
         </td>
         <td class="amt">
           {{#if invoice.single}}
@@ -361,7 +361,17 @@
     <div class="total-line">
       <span class="label">Gesamt:</span>
       <span class="value">
-        {{#if flags.isWeekly}}
+        {{#if flags.isCreditNote}}
+        {{#if booking.discount.finalPrice}}
+        {{fmtMoney booking.discount.finalPrice invoice.currency}}
+        {{else if invoice.single}}
+        {{fmtMoney invoice.single invoice.currency}}
+        {{else if pricing.single}}
+        {{fmtMoney pricing.single pricing.currency}}
+        {{else}}
+        {{fmtMoney booking.priceAtBooking invoice.currency}}
+        {{/if}}
+        {{else if flags.isWeekly}}
         {{#if booking.discount.finalPrice}}
         {{fmtMoney booking.discount.finalPrice invoice.currency}}
         {{else if invoice.firstMonth}}

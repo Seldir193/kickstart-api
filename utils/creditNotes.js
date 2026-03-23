@@ -122,23 +122,6 @@ function ensureMeta(booking) {
   return booking.meta;
 }
 
-// function resolveCreditAmount(booking, offer, meta) {
-//   const eff =
-//     typeof meta.creditNoteAmount === "number"
-//       ? Number(meta.creditNoteAmount)
-//       : typeof booking.priceAtBooking === "number"
-//         ? Number(booking.priceAtBooking)
-//         : typeof offer?.price === "number"
-//           ? Number(offer.price)
-//           : 0;
-
-//   return {
-//     abs: Math.abs(eff),
-//     neg: -Math.abs(eff),
-//     absForMail: Math.abs(eff),
-//   };
-// }
-
 function resolveCreditAmount(booking, offer, meta) {
   const grossPrice =
     typeof meta.grossPrice === "number"
