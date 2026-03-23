@@ -305,7 +305,8 @@ function docsFromBooking(customer, b, state) {
     });
   }
 
-  const creditNo = String(meta.creditNoteNo || "").trim();
+  // const creditNo = String(meta.creditNoteNo || "").trim();
+  const creditNo = normalizeInvoiceNo(String(meta.creditNoteNo || "").trim());
   const creditDateRaw = String(meta.creditNoteDate || "").trim();
   const creditIssued =
     creditDateRaw || b.returnedAt || state?.returnedAt || null;
@@ -338,181 +339,6 @@ function docsFromBooking(customer, b, state) {
 
   return items;
 }
-
-// function docsFromBooking(customer, b, state) {
-//   const items = [];
-//   const baseTitle = b.offerTitle || b.offerType || "Booking";
-
-//   const customerName = customerNameFrom(customer);
-//   const customerChildName = customerChildNameFrom(customer);
-
-//   const bookingRefId = String(b.bookingId || b._id || "").trim();
-//   const rowIdBase = String(b._id || bookingRefId || "").trim();
-
-//   if (!bookingRefId) return items;
-
-//   const invNo = b.invoiceNumber || b.invoiceNo || null;
-//   const invDate = b.invoiceDate || null;
-
-//   const cancNo = b.cancellationNo || b.cancellationNumber || null;
-//   const cancDate = b.cancelDate || b.cancellationDate || null;
-
-//   const storNo = b.stornoNo || b.stornoNumber || null;
-//   const storDate = b.stornoDate || null;
-
-//   const statusLower = String(b.status || "").toLowerCase();
-
-//   const textForType =
-//     `${b.offerTitle || ""} ${b.offerType || ""}`.toLowerCase();
-//   const isHoliday = /camp|feriencamp|holiday|powertraining|power training/.test(
-//     textForType,
-//   );
-
-//   const issuedParticipation = invDate || b.createdAt || b.date || null;
-
-//   if (invNo || invDate || isHoliday) {
-//     items.push({
-//       id: `inv:${rowIdBase}`,
-//       bookingId: bookingRefId,
-//       customerId: String(customer._id),
-//       type: "participation",
-//       title: `${baseTitle} – Teilnahmebestätigung`,
-//       issuedAt: issuedParticipation ? toISO(issuedParticipation) : undefined,
-//       offerTitle: b.offerTitle || undefined,
-//       offerType: b.offerType || undefined,
-//       amount: b.priceAtBooking != null ? Number(b.priceAtBooking) : undefined,
-//       currency: b.currency || "EUR",
-//       customerNumber: customer.userId,
-//       customerName: customerName || undefined,
-//       customerChildName: customerChildName || undefined,
-//       invoiceNo: invNo || undefined,
-//       invoiceNumber: invNo || undefined,
-//       href: `/api/admin/bookings/${encodeURIComponent(
-//         bookingRefId,
-//       )}/documents/participation`,
-//       exportHref: `/api/admin/customers/${encodeURIComponent(
-//         String(customer._id),
-//       )}/bookings/${encodeURIComponent(bookingRefId)}/participation.pdf`,
-//     });
-//   }
-
-//   const issuedCancellation = cancDate || b.updatedAt || b.createdAt || null;
-//   const hasStorno = Boolean(storNo || storDate || statusLower === "storno");
-//   const hasCancellation = Boolean(
-//     cancNo || cancDate || statusLower === "cancelled",
-//   );
-
-//   if (!isHoliday && !hasStorno && hasCancellation) {
-//     items.push({
-//       id: `can:${rowIdBase}`,
-//       bookingId: bookingRefId,
-//       customerId: String(customer._id),
-//       type: "cancellation",
-//       title: `${baseTitle} – Kündigungsbestätigung`,
-//       issuedAt: issuedCancellation ? toISO(issuedCancellation) : undefined,
-//       offerTitle: b.offerTitle || undefined,
-//       offerType: b.offerType || undefined,
-//       customerNumber: customer.userId,
-//       customerName: customerName || undefined,
-//       customerChildName: customerChildName || undefined,
-//       cancellationNo: cancNo || undefined,
-//       href: `/api/admin/bookings/${encodeURIComponent(
-//         bookingRefId,
-//       )}/documents/cancellation`,
-//       exportHref: `/api/admin/customers/${encodeURIComponent(
-//         String(customer._id),
-//       )}/bookings/${encodeURIComponent(bookingRefId)}/cancellation.pdf`,
-//     });
-//   }
-
-//   const issuedStorno = storDate || cancDate || null;
-
-//   if (storNo || storDate || statusLower === "storno") {
-//     items.push({
-//       id: `sto:${rowIdBase}`,
-//       bookingId: bookingRefId,
-//       customerId: String(customer._id),
-//       type: "storno",
-//       title: `${baseTitle} – Storno-Rechnung`,
-//       issuedAt: issuedStorno ? toISO(issuedStorno) : undefined,
-//       offerTitle: b.offerTitle || undefined,
-//       offerType: b.offerType || undefined,
-//       amount: b.stornoAmount != null ? Number(b.stornoAmount) : undefined,
-//       currency: b.currency || "EUR",
-//       customerNumber: customer.userId,
-//       customerName: customerName || undefined,
-//       customerChildName: customerChildName || undefined,
-//       stornoNo: storNo || undefined,
-//       stornoNumber: storNo || undefined,
-//       href: `/api/admin/bookings/${encodeURIComponent(
-//         bookingRefId,
-//       )}/documents/storno`,
-//       exportHref: `/api/admin/customers/${encodeURIComponent(
-//         String(customer._id),
-//       )}/bookings/${encodeURIComponent(bookingRefId)}/storno.pdf`,
-//     });
-//   }
-
-//   if (DEBUG_INVOICES) {
-//     console.log("[DOC_FROM_BOOKING]", {
-//       bookingId: b._id,
-//       bookingRefId,
-//       offerTitle: b.offerTitle,
-//       invoiceDate: b.invoiceDate,
-//       createdAt: b.createdAt,
-//       cancelDate: b.cancelDate || null,
-//       stornoDate: b.stornoDate || null,
-//       isHoliday,
-//       issuedParticipation,
-//       status: statusLower,
-//       hasStorno,
-//       hasCancellation,
-//       customerNumber: customer.userId,
-//       customerName,
-//       customerChildName,
-//       invNo,
-//       cancNo,
-//       storNo,
-//     });
-//   }
-
-//   const refMeta = b && typeof b.meta === "object" ? b.meta : {};
-//   const stateMeta = state && typeof state.meta === "object" ? state.meta : {};
-//   const meta = { ...refMeta, ...stateMeta };
-
-//   const creditNo = String(meta.creditNoteNo || "").trim();
-//   const creditDateRaw = String(meta.creditNoteDate || "").trim();
-//   const creditIssued =
-//     creditDateRaw || b.returnedAt || state?.returnedAt || null;
-
-//   if (creditNo) {
-//     items.push({
-//       id: `cr:${rowIdBase}:${creditNo.replace(/[^\w.-]+/g, "_")}`,
-//       bookingId: bookingRefId,
-//       customerId: String(customer._id),
-//       type: "creditnote",
-//       title: `${baseTitle} – Gutschrift`,
-//       issuedAt: creditIssued ? toISO(creditIssued) : undefined,
-//       offerTitle: b.offerTitle || undefined,
-//       offerType: b.offerType || undefined,
-//       amount:
-//         meta.creditNoteAmount != null
-//           ? Number(meta.creditNoteAmount)
-//           : undefined,
-//       currency: b.currency || "EUR",
-//       customerNumber: customer.userId,
-//       customerName: customerName || undefined,
-//       customerChildName: customerChildName || undefined,
-//       creditNoteNo: creditNo,
-//       href: `/api/admin/customers/bookings/${encodeURIComponent(
-//         bookingRefId,
-//       )}/credit-note.pdf`,
-//       fileName: `Gutschrift-${creditNo.replace(/[^\w.-]+/g, "_")}`,
-//     });
-//   }
-
-//   return items;
-// }
 
 function issuedTime(v) {
   if (!v) return 0;
@@ -1099,46 +925,6 @@ async function buildInvoiceList({
     }
   }
 
-  // for (const r of recurringInvoiceRows) {
-  //   if (!typeSet.has(String(r.type || "").toLowerCase())) continue;
-
-  //   const blob = [
-  //     r.customerName,
-  //     r.customerChildName,
-  //     r.title,
-  //     r.offerTitle,
-  //     r.offerType,
-  //     r.bookingId,
-  //   ]
-  //     .filter(Boolean)
-  //     .join(" ");
-
-  //   const customerNumber = r.customerNumber ?? "";
-  //   const docNo = docNoFrom(r);
-
-  //   if (!matchesInvoiceQuery({ q, customerNumber, docNo, blob })) continue;
-
-  //   if (r.issuedAt && (fromDate || toDate)) {
-  //     const t = new Date(r.issuedAt).getTime();
-  //     if (!Number.isNaN(t)) {
-  //       if (fromDate && t < fromDate.getTime()) continue;
-  //       if (toDate && t > toDate.getTime()) continue;
-  //     }
-  //   }
-
-  //   all.push(r);
-  // }
-
-  // console.log(
-  //   "[adminInvoices][allBeforeFilter]",
-  //   all.map((r) => ({
-  //     id: r.id,
-  //     type: r.type,
-  //     invoiceNo: r.invoiceNo,
-  //     title: r.title,
-  //   })),
-  // );
-
   for (const r of recurringInvoiceRows) {
     const rowType = String(r.type || "").toLowerCase();
     const hasType = typeSet.has(rowType);
@@ -1305,37 +1091,6 @@ function buildPdfUrlForItem(item, origin) {
     `${typeToPdf(item.type)}.pdf`
   );
 }
-
-// async function appendInvoicePdfToArchive({ archive, item, origin, provider }) {
-//   const pdfUrl = buildPdfUrlForItem(item, origin);
-
-//   if (!pdfUrl) {
-//     throw new Error("missing customerId/bookingId and href");
-//   }
-
-//   const response = await fetch(pdfUrl, {
-//     headers: provider ? { "x-provider-id": provider } : {},
-//     redirect: "follow",
-//   });
-
-//   if (!response.ok) {
-//     const msg = `Fetch failed (${response.status}) for ${pdfUrl}`;
-//     archive.append(Buffer.from(msg, "utf8"), {
-//       name: `error-${item.bookingId || "unknown"}.txt`,
-//     });
-//     return;
-//   }
-
-//   const contentType = (
-//     response.headers.get("content-type") || ""
-//   ).toLowerCase();
-//   const buf = Buffer.from(await response.arrayBuffer());
-//   const rawName = fileNameBaseFromItem(item);
-//   const hasPdfExt = /\.pdf$/i.test(rawName);
-//   const ext = contentType.includes("pdf") ? (hasPdfExt ? "" : ".pdf") : ".bin";
-
-//   archive.append(buf, { name: `${rawName}${ext}` });
-// }
 
 async function appendInvoicePdfToArchive({ archive, item, origin, provider }) {
   const isRecurringInvoice = String(item?.type || "").trim() === "invoice";

@@ -187,6 +187,7 @@ function buildCsvRow(item, options = {}) {
   const isStorno = item.type === "storno";
 
   const isInvoice = item.type === "invoice";
+  const isCreditNote = item.type === "creditnote";
 
   const dunningAmounts = isDunning
     ? calcDunningAmounts(item)
@@ -205,6 +206,8 @@ function buildCsvRow(item, options = {}) {
   if (isStorno) basePrice = toNum(item.stornoAmount ?? item.amount, 0);
   if (isParticipation) basePrice = toNum(item.amount, 0);
   if (isInvoice) basePrice = toNum(item.amount, 0);
+  if (isCreditNote)
+    basePrice = Math.abs(toNum(item.amount ?? item.finalPrice, 0));
 
   if (isCancellation) basePrice = 0;
 
@@ -266,11 +269,15 @@ function buildCsvRow(item, options = {}) {
       : isInvoice
         ? "0.00"
         : "",
-    finalPrice: isParticipation
-      ? toNum(item.finalPrice, item.amount).toFixed(2)
-      : isInvoice
-        ? toNum(item.finalPrice, item.amount).toFixed(2)
+    finalPrice:
+      isParticipation || isInvoice || isCreditNote
+        ? Math.abs(toNum(item.finalPrice, item.amount)).toFixed(2)
         : "",
+    // finalPrice: isParticipation
+    //   ? toNum(item.finalPrice, item.amount).toFixed(2)
+    //   : isInvoice
+    //     ? toNum(item.finalPrice, item.amount).toFixed(2)
+    //     : "",
     dunningStage: isDunning ? String(item.stage || "") : "",
     dunningSubject: isDunning ? String(item.subject || "") : "",
     originalInvoiceAmount: isDunning
