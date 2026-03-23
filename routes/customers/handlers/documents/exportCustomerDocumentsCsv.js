@@ -791,8 +791,8 @@ function buildCustomerCreditNoteDocs(customer) {
         offerType: safeText(ref.offerType),
         currency: safeText(ref.currency) || "EUR",
         creditNoteNo,
-        invoiceNo: creditNoteNo,
-        invoiceNumber: creditNoteNo,
+        //  invoiceNo: creditNoteNo,
+        //  invoiceNumber: creditNoteNo,
         amount: creditRef?.amount,
         finalPrice: creditRef?.finalPrice,
 
@@ -968,11 +968,18 @@ async function exportCustomerDocumentsCsv(
       );
       const amounts = amountFields(d, b, offer);
 
-      const invoiceNo = normalizeInvoiceNo(
+      // const invoiceNo = normalizeInvoiceNo(
+      //   d.type === "creditnote"
+      //     ? d.creditNoteNo || d.invoiceNo || d.invoiceNumber || ""
+      //     : d.invoiceNo || b.invoiceNumber || b.invoiceNo || "",
+      // );
+
+      const invoiceNo =
         d.type === "creditnote"
-          ? d.creditNoteNo || d.invoiceNo || d.invoiceNumber || ""
-          : d.invoiceNo || b.invoiceNumber || b.invoiceNo || "",
-      );
+          ? ""
+          : normalizeInvoiceNo(
+              d.invoiceNo || b.invoiceNumber || b.invoiceNo || "",
+            );
 
       const invoiceDate = d.invoiceDate || b.invoiceDate || d.issuedAt || null;
 
@@ -1024,7 +1031,8 @@ async function exportCustomerDocumentsCsv(
         d.currency || b.currency || "EUR",
         d.href || "",
         invoiceNo || "",
-        d.type === "creditnote" ? d.creditNoteNo || invoiceNo || "" : "",
+        d.type === "creditnote" ? normalizeInvoiceNo(d.creditNoteNo || "") : "",
+        // d.type === "creditnote" ? d.creditNoteNo || invoiceNo || "" : "",
         fmtDeDate(invoiceDate),
         refInvoiceNo || "",
         refInvoiceDate || "",
