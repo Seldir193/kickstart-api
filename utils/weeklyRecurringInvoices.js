@@ -1,3 +1,4 @@
+//utils\weeklyRecurringInvoices.js
 "use strict";
 
 const Customer = require("../models/Customer");
@@ -11,6 +12,10 @@ const {
   typeCodeFromOffer,
   formatNumber,
 } = require("./sequences");
+
+const fs = require("fs/promises");
+const path = require("path");
+const BillingDocument = require("../models/BillingDocument");
 
 function safeText(v) {
   return String(v ?? "").trim();
@@ -572,6 +577,93 @@ async function sendRecurringInvoiceMail({
   return true;
 }
 
+function archiveRootDir() {
+  return path.join(process.cwd(), "uploads", "billingdocuments");
+}
+
+function monthFolder(value) {
+  const d = toDate(value) || new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function safeFilePart(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .trim()
+    .slice(0, 120);
+}
+
+function recurringInvoiceFileName(invoiceNo, invoiceDate) {
+  const datePart = toIso(invoiceDate).slice(0, 10) || "undated";
+  const noPart = safeFilePart(invoiceNo || "invoice");
+  return `rechnung-${noPart}-${datePart}.pdf`;
+}
+
+async function archiveRecurringInvoicePdf({
+  ownerId,
+  booking,
+  customer,
+  stripeInvoice,
+  invoiceNo,
+  invoiceDate,
+  pdfBuffer,
+}) {
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) return null;
+
+  const ownerStr = safeText(ownerId);
+  const folder = path.join(
+    archiveRootDir(),
+    ownerStr,
+    monthFolder(invoiceDate),
+  );
+  await fs.mkdir(folder, { recursive: true });
+
+  const fileName = recurringInvoiceFileName(invoiceNo, invoiceDate);
+  const absPath = path.join(folder, fileName);
+
+  await fs.writeFile(absPath, pdfBuffer);
+
+  return BillingDocument.create({
+    owner: ownerStr,
+    kind: "invoice",
+    category: "billing",
+    mimeType: "application/pdf",
+    fileName,
+    filePath: absPath,
+    fileSize: Buffer.byteLength(pdfBuffer),
+    bookingId: booking?._id || null,
+    customerId: customer?._id || null,
+    customerNo: safeText(customer?.userId),
+    invoiceNo: safeText(invoiceNo),
+    invoiceDate: toDate(invoiceDate),
+    offerTitle: pickFirst(
+      booking?.offerTitle,
+      booking?.offerType,
+      stripeInvoice?.description,
+    ),
+    subject: "Weekly Monthly Invoice",
+    sentAt: new Date(),
+    dueAt: null,
+    searchText: [
+      "invoice",
+      safeText(invoiceNo),
+      safeText(customer?.userId),
+      safeText(booking?.offerTitle),
+      safeText(booking?.offerType),
+      safeText(customer?.parent?.firstName),
+      safeText(customer?.parent?.lastName),
+      safeText(customer?.parent?.email),
+      safeText(booking?.childFirstName),
+      safeText(booking?.childLastName),
+    ]
+      .filter(Boolean)
+      .join(" "),
+    createdBy: ownerStr,
+  });
+}
+
 async function createWeeklyRecurringInvoiceForBooking({
   ownerId,
   offer,
@@ -678,6 +770,10 @@ async function createWeeklyRecurringInvoiceForBooking({
     periodEnd: toIso(periodEnd),
   });
 
+  entry.billingDocumentId = "";
+  entry.fileName = "";
+  entry.filePath = "";
+
   ensureRecurringList(meta).push(entry);
   booking.markModified("meta");
   await booking.save();
@@ -723,6 +819,35 @@ async function createWeeklyRecurringInvoiceForBooking({
     periodStart,
     periodEnd,
   });
+
+  let archivedDocument = null;
+
+  if (pdfBuffer) {
+    archivedDocument = await archiveRecurringInvoicePdf({
+      ownerId,
+      booking,
+      customer,
+      stripeInvoice,
+      invoiceNo,
+      invoiceDate,
+      pdfBuffer,
+    });
+
+    if (archivedDocument) {
+      entry.billingDocumentId = String(archivedDocument._id || "");
+      entry.fileName = safeText(archivedDocument.fileName);
+      entry.filePath = safeText(archivedDocument.filePath);
+      booking.markModified("meta");
+      await booking.save();
+    }
+
+    console.log("[weeklyRecurringInvoice] archived billing document", {
+      bookingId: String(booking?._id || ""),
+      invoiceNo,
+      documentId: String(archivedDocument?._id || ""),
+      fileName: archivedDocument?.fileName || "",
+    });
+  }
 
   const to = bookingRecipientEmail(booking, customer);
   const sent = await sendRecurringInvoiceMail({

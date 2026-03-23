@@ -157,6 +157,11 @@ function csvHeaders() {
     "brandEmail",
     "brandWebsite",
     "vatNote",
+
+    "voucherCode",
+    "voucherDiscount",
+    "totalDiscount",
+    "finalPrice",
     "dunningStage",
     "dunningSubject",
     "originalInvoiceAmount",
@@ -181,6 +186,8 @@ function buildCsvRow(item, options = {}) {
   const isCancellation = item.type === "cancellation";
   const isStorno = item.type === "storno";
 
+  const isInvoice = item.type === "invoice";
+
   const dunningAmounts = isDunning
     ? calcDunningAmounts(item)
     : {
@@ -197,6 +204,8 @@ function buildCsvRow(item, options = {}) {
   if (isDunning) basePrice = dunningAmounts.totalExtraFees;
   if (isStorno) basePrice = toNum(item.stornoAmount ?? item.amount, 0);
   if (isParticipation) basePrice = toNum(item.amount, 0);
+  if (isInvoice) basePrice = toNum(item.amount, 0);
+
   if (isCancellation) basePrice = 0;
 
   const unitNet = toNum(basePrice, 0);
@@ -245,6 +254,23 @@ function buildCsvRow(item, options = {}) {
     brandEmail: brand.brandEmail,
     brandWebsite: brand.brandWebsite,
     vatNote: brand.vatNote,
+
+    voucherCode: isParticipation ? String(item.voucherCode || "") : "",
+    voucherDiscount: isParticipation
+      ? toNum(item.voucherDiscount, 0).toFixed(2)
+      : isInvoice
+        ? "0.00"
+        : "",
+    totalDiscount: isParticipation
+      ? toNum(item.totalDiscount, 0).toFixed(2)
+      : isInvoice
+        ? "0.00"
+        : "",
+    finalPrice: isParticipation
+      ? toNum(item.finalPrice, item.amount).toFixed(2)
+      : isInvoice
+        ? toNum(item.finalPrice, item.amount).toFixed(2)
+        : "",
     dunningStage: isDunning ? String(item.stage || "") : "",
     dunningSubject: isDunning ? String(item.subject || "") : "",
     originalInvoiceAmount: isDunning

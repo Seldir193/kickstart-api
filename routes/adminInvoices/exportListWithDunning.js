@@ -33,39 +33,6 @@ function matchesDunningQuery({ q, doc, norm, isDigitsOnly }) {
   return norm(blob).includes(qq);
 }
 
-// function mapDunningDocumentToInvoiceRow(doc) {
-//   return {
-//     id: `dunning:${String(doc._id)}`,
-//     bookingId: String(doc.bookingId || ""),
-//     customerId: String(doc.customerId || ""),
-//     type: "dunning",
-//     title: doc.subject || dunningStageLabel(doc.stage),
-//     issuedAt: doc.sentAt || doc.createdAt || null,
-//     offerTitle: doc.offerTitle || undefined,
-//     offerType: "dunning",
-//     amount: undefined,
-//     currency: doc?.feesSnapshot?.currency || "EUR",
-//     customerNumber: doc.customerNo || undefined,
-//     customerName: undefined,
-//     customerChildName: undefined,
-//     invoiceNo: doc.invoiceNo || undefined,
-//     invoiceNumber: doc.invoiceNo || undefined,
-//     href: `/api/admin/invoices/dunning-documents/${encodeURIComponent(
-//       String(doc._id),
-//     )}/download`,
-//     kind: "dunning",
-//     stage: doc.stage || null,
-//     fileName: doc.fileName || undefined,
-//     filePath: doc.filePath || undefined,
-//     paymentStatus: "open",
-//     dunningCount: 1,
-//     lastDunningStage: doc.stage || null,
-//     lastDunningSentAt: doc.sentAt || null,
-//     nextDunningStage: doc.stage === "final" ? "final" : null,
-//     subject: doc.subject || undefined,
-//   };
-// }
-
 function mapDunningDocumentToInvoiceRow(doc) {
   const fees = doc?.feesSnapshot || {};
   const returnBankFee = Number(fees.returnBankFee || 0);
@@ -154,41 +121,6 @@ async function fetchDunningDocs({ BillingDocument, filter, max }) {
     .limit(max)
     .lean();
 }
-
-// async function loadDunningDocumentsForList({
-//   owner,
-//   query,
-//   hardLimit,
-//   BillingDocument,
-//   clamp,
-//   normalizeFilterDate,
-//   norm,
-//   isDigitsOnly,
-// }) {
-//   const q = String(query.q || "").trim();
-//   const stageFilter = String(query.stage || "").trim();
-//   const max = clamp(query.limit, 1, hardLimit ?? 10000);
-//   const { fromDate, toDate } = buildDateRange({ query, normalizeFilterDate });
-
-//   const docs = await fetchDunningDocs({
-//     BillingDocument,
-//     filter: buildDunningFilter({ owner, stageFilter }),
-//     max,
-//   });
-
-//   const out = [];
-
-//   for (const doc of docs) {
-//     if (!matchesDunningQuery({ q, doc, norm, isDigitsOnly })) continue;
-
-//     const issuedAt = doc.sentAt || doc.createdAt || null;
-//     if (!inDateRange({ issuedAt, fromDate, toDate })) continue;
-
-//     out.push(mapDunningDocumentToInvoiceRow(doc));
-//   }
-
-//   return out;
-// }
 
 async function loadDunningDocumentsForList({
   owner,

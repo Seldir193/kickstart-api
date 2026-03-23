@@ -1,4 +1,3 @@
-// routes/customers/handlers/documents/listCustomerDocuments.js
 "use strict";
 
 const mongoose = require("mongoose");
@@ -58,6 +57,140 @@ function safeText(v) {
 
 function safeLower(v) {
   return safeText(v).toLowerCase();
+}
+
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function bookingBaseAmount(booking) {
+  if (booking?.priceMonthly != null) return toNumber(booking.priceMonthly, 0);
+  if (booking?.priceAtBooking != null)
+    return toNumber(booking.priceAtBooking, 0);
+  if (booking?.price != null) return toNumber(booking.price, 0);
+  return 0;
+}
+
+function bookingMapFrom(customer) {
+  const refs = Array.isArray(customer?.bookings) ? customer.bookings : [];
+  return new Map(refs.map((b) => [safeText(b?.bookingId || b?._id), b]));
+}
+
+function bookingInvoiceNo(booking) {
+  return safeText(booking?.invoiceNumber || booking?.invoiceNo);
+}
+
+function resolveDiscountMeta(booking) {
+  const discount =
+    booking?.discount && typeof booking.discount === "object"
+      ? booking.discount
+      : booking?.meta?.discount && typeof booking.meta.discount === "object"
+        ? booking.meta.discount
+        : {};
+
+  return {
+    voucherCode: safeText(discount?.voucherCode || booking?.meta?.voucherCode),
+    voucherDiscount: toNumber(discount?.voucherDiscount, 0),
+    totalDiscount: toNumber(discount?.totalDiscount, 0),
+    finalPrice: toNumber(
+      discount?.finalPrice,
+      booking?.priceAtBooking ?? booking?.priceMonthly ?? booking?.price ?? 0,
+    ),
+  };
+}
+
+// function recurringInvoiceHref(docId) {
+//   return `/api/admin/invoices/billing-documents/${encodeURIComponent(docId)}/download`;
+// }
+
+function recurringInvoiceHref(customerId, docId) {
+  return `/api/admin/customers/${encodeURIComponent(
+    customerId,
+  )}/documents/billing-invoices/${encodeURIComponent(docId)}/download`;
+}
+
+function buildBillingInvoiceDocs(customer, billingDocs) {
+  const customerId = safeText(customer?._id);
+  const bookingById = bookingMapFrom(customer);
+  const out = [];
+
+  for (const doc of billingDocs || []) {
+    const docId = safeText(doc?._id);
+    const bookingId = safeText(doc?.bookingId);
+    if (!docId || !bookingId) continue;
+
+    const booking = bookingById.get(bookingId);
+    if (!booking) continue;
+
+    const invoiceNo = safeText(doc?.invoiceNo);
+    const primaryBookingInvoiceNo = bookingInvoiceNo(booking);
+
+    if (
+      invoiceNo &&
+      primaryBookingInvoiceNo &&
+      invoiceNo === primaryBookingInvoiceNo
+    ) {
+      continue;
+    }
+
+    const discount = resolveDiscountMeta(booking);
+    const titleBase = safeText(
+      booking?.offerTitle || doc?.offerTitle || "Angebot",
+    );
+
+    out.push({
+      id: `invoice:${docId}`,
+      bookingId,
+      customerId,
+      type: "invoice",
+      title: `Rechnung – ${titleBase}`,
+      issuedAt: doc?.invoiceDate || doc?.sentAt || doc?.createdAt || null,
+      //  href: recurringInvoiceHref(docId),
+
+      href: recurringInvoiceHref(customerId, docId),
+
+      offerTitle: safeText(booking?.offerTitle || doc?.offerTitle),
+      offerType: safeText(booking?.offerType),
+      status: safeText(booking?.status) || "open",
+      currency: safeText(doc?.currency || booking?.currency) || "EUR",
+
+      invoiceNo,
+      invoiceDate: doc?.invoiceDate || null,
+      fileName: safeText(doc?.fileName),
+      filePath: safeText(doc?.filePath),
+      amount: bookingBaseAmount(booking),
+
+      voucherCode: discount.voucherCode,
+      voucherDiscount: discount.voucherDiscount,
+      totalDiscount: discount.totalDiscount,
+      finalPrice: discount.finalPrice,
+
+      childUid: safeText(booking?.childUid),
+      childFirstName: safeText(booking?.childFirstName),
+      childLastName: safeText(booking?.childLastName),
+    });
+  }
+
+  return out;
+}
+
+async function loadInvoiceDocsForCustomer(owner, customer) {
+  const bookings = Array.isArray(customer?.bookings) ? customer.bookings : [];
+  const bookingIds = bookings
+    .map((b) => String(b?.bookingId || b?._id || ""))
+    .filter((v) => v && mongoose.isValidObjectId(v));
+
+  if (!bookingIds.length) return [];
+
+  return BillingDocument.find({
+    owner: String(owner),
+    kind: "invoice",
+    bookingId: { $in: bookingIds },
+    voidedAt: null,
+  })
+    .sort({ invoiceDate: -1, createdAt: -1 })
+    .lean();
 }
 
 async function loadBookingParentMap(owner, bookingRefs) {
@@ -217,8 +350,6 @@ function buildCustomerCreditNoteDocs(customer, opts = {}) {
   const childFirst = safeText(opts.childFirst);
   const childLast = safeText(opts.childLast);
 
-  //const parentEmail = safeLower(req.query.parentEmail);
-
   const out = [];
 
   for (const ref of refs) {
@@ -304,7 +435,6 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
     const childLast = safeText(req.query.childLast);
 
     const scope = safeText(req.query.scope).toLowerCase();
-
     const parentEmail = safeLower(req.query.parentEmail);
 
     const customer = await Customer.findOne({ _id: id, owner }).lean();
@@ -315,14 +445,6 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
       : [];
 
     const bookingParentMap = await loadBookingParentMap(owner, bookingRefs);
-
-    // const distinctChildUids = new Set(
-    //   bookingRefs.map((b) => safeText(b?.childUid)).filter(Boolean),
-    // );
-
-    // if (!childUid && distinctChildUids.size > 1) {
-    //   return res.json({ ok: true, items: [], total: 0, page, limit });
-    // }
 
     const distinctChildUids = new Set(
       bookingRefs.map((b) => safeText(b?.childUid)).filter(Boolean),
@@ -344,6 +466,9 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
       childLast,
     });
 
+    const invoiceSource = await loadInvoiceDocsForCustomer(owner, customer);
+    const invoiceDocs = buildBillingInvoiceDocs(customer, invoiceSource);
+
     const dunningSource = await loadDunningDocsForCustomer(owner, customer);
     const dunningDocs = buildCustomerDunningDocs(customer, dunningSource);
 
@@ -356,15 +481,14 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
       ? buildContractDocsFromMap(customer, bookingRefs, contractMetaMap)
       : [];
 
-    // let filtered = [
-    //   ...bookingDocs,
-    //   ...creditNoteDocs,
-    //   ...contractDocs,
-    //   ...dunningDocs,
-    // ].filter((d) => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
-
     let filtered = attachParentMeta(
-      [...bookingDocs, ...creditNoteDocs, ...contractDocs, ...dunningDocs],
+      [
+        ...bookingDocs,
+        ...invoiceDocs,
+        ...creditNoteDocs,
+        ...contractDocs,
+        ...dunningDocs,
+      ],
       bookingParentMap,
     ).filter((d) => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
 
@@ -388,24 +512,6 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
 
     if (from) filtered = filtered.filter((d) => new Date(d.issuedAt) >= from);
     if (to) filtered = filtered.filter((d) => new Date(d.issuedAt) <= to);
-
-    //     let filtered = attachParentMeta(
-    //       [...bookingDocs, ...creditNoteDocs, ...contractDocs, ...dunningDocs],
-    //       bookingParentMap,
-    //     ).filter((d) => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
-
-    //     if (childUid) {
-    //       filtered = filtered.filter((d) => safeText(d?.childUid) === childUid);
-    //     }
-
-    //     if (from) filtered = filtered.filter((d) => new Date(d.issuedAt) >= from);
-    //     if (to) filtered = filtered.filter((d) => new Date(d.issuedAt) <= to);
-
-    //        if (parentEmail) {
-    //   filtered = filtered.filter(
-    //     (d) => safeLower(d?.parentEmail) === parentEmail,
-    //   );
-    // }
 
     sortDocs(filtered, sortKey, sortMul);
 
@@ -480,6 +586,52 @@ module.exports = { listCustomerDocuments };
 //   return String(v ?? "").trim();
 // }
 
+// function safeLower(v) {
+//   return safeText(v).toLowerCase();
+// }
+
+// async function loadBookingParentMap(owner, bookingRefs) {
+//   const bookingIds = (Array.isArray(bookingRefs) ? bookingRefs : [])
+//     .map((b) => String(b?.bookingId || b?._id || ""))
+//     .filter((v) => v && mongoose.isValidObjectId(v));
+
+//   if (!bookingIds.length) return new Map();
+
+//   const docs = await Booking.find(
+//     { _id: { $in: bookingIds }, owner: String(owner) },
+//     {
+//       "invoiceTo.parent.email": 1,
+//       "invoiceTo.parent.firstName": 1,
+//       "invoiceTo.parent.lastName": 1,
+//     },
+//   )
+//     .lean()
+//     .catch(() => []);
+
+//   return new Map(
+//     docs.map((d) => [
+//       String(d._id),
+//       {
+//         parentEmail: safeLower(d?.invoiceTo?.parent?.email),
+//         parentFirstName: safeText(d?.invoiceTo?.parent?.firstName),
+//         parentLastName: safeText(d?.invoiceTo?.parent?.lastName),
+//       },
+//     ]),
+//   );
+// }
+
+// function attachParentMeta(items, parentMap) {
+//   return (Array.isArray(items) ? items : []).map((item) => {
+//     const meta = parentMap.get(String(item?.bookingId || "")) || {};
+//     return {
+//       ...item,
+//       parentEmail: safeLower(meta.parentEmail),
+//       parentFirstName: safeText(meta.parentFirstName),
+//       parentLastName: safeText(meta.parentLastName),
+//     };
+//   });
+// }
+
 // function hasContractMeta(meta) {
 //   const signedAt = safeText(meta?.contractSignedAt);
 //   const html = safeText(meta?.contractSnapshot?.contractDoc?.contentHtml);
@@ -551,10 +703,6 @@ module.exports = { listCustomerDocuments };
 //   }
 
 //   return out;
-// }
-
-// function safeLower(v) {
-//   return safeText(v).toLowerCase();
 // }
 
 // function childNameMatches(ref, childFirst, childLast) {
@@ -640,6 +788,8 @@ module.exports = { listCustomerDocuments };
 //         creditNoteNo,
 //         invoiceNo: creditNoteNo,
 //         invoiceNumber: creditNoteNo,
+//         amount: creditRef?.amount,
+//         finalPrice: creditRef?.finalPrice,
 
 //         childUid: safeText(ref.childUid),
 //         childFirstName: safeText(ref.childFirstName),
@@ -681,6 +831,10 @@ module.exports = { listCustomerDocuments };
 //     const childFirst = safeText(req.query.childFirst);
 //     const childLast = safeText(req.query.childLast);
 
+//     const scope = safeText(req.query.scope).toLowerCase();
+
+//     const parentEmail = safeLower(req.query.parentEmail);
+
 //     const customer = await Customer.findOne({ _id: id, owner }).lean();
 //     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
@@ -688,11 +842,13 @@ module.exports = { listCustomerDocuments };
 //       ? customer.bookings
 //       : [];
 
+//     const bookingParentMap = await loadBookingParentMap(owner, bookingRefs);
+
 //     const distinctChildUids = new Set(
 //       bookingRefs.map((b) => safeText(b?.childUid)).filter(Boolean),
 //     );
 
-//     if (!childUid && distinctChildUids.size > 1) {
+//     if (!scope && !childUid && distinctChildUids.size > 1) {
 //       return res.json({ ok: true, items: [], total: 0, page, limit });
 //     }
 
@@ -720,15 +876,27 @@ module.exports = { listCustomerDocuments };
 //       ? buildContractDocsFromMap(customer, bookingRefs, contractMetaMap)
 //       : [];
 
-//     let filtered = [
-//       ...bookingDocs,
-//       ...creditNoteDocs,
-//       ...contractDocs,
-//       ...dunningDocs,
-//     ].filter((d) => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
+//     let filtered = attachParentMeta(
+//       [...bookingDocs, ...creditNoteDocs, ...contractDocs, ...dunningDocs],
+//       bookingParentMap,
+//     ).filter((d) => docMatchesType(d, typeSet) && docMatchesQuery(d, q));
 
 //     if (childUid) {
 //       filtered = filtered.filter((d) => safeText(d?.childUid) === childUid);
+//     }
+
+//     if (parentEmail) {
+//       filtered = filtered.filter(
+//         (d) => safeLower(d?.parentEmail) === parentEmail,
+//       );
+//     }
+
+//     if (scope === "self") {
+//       filtered = filtered.filter((d) => !safeText(d?.childUid));
+//     }
+
+//     if (scope === "child") {
+//       filtered = filtered.filter((d) => safeText(d?.childUid));
 //     }
 
 //     if (from) filtered = filtered.filter((d) => new Date(d.issuedAt) >= from);

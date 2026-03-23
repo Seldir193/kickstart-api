@@ -83,6 +83,10 @@ const {
   creditNotePdf,
 } = require("./customers/handlers/documents/creditNotePdf");
 
+const {
+  downloadBillingInvoice,
+} = require("./customers/handlers/documents/downloadBillingInvoice");
+
 /* ===================================================================== */
 /* ================================ LIST =============================== */
 /* ===================================================================== */
@@ -286,6 +290,10 @@ router.post("/:id/bookings", (req, res) =>
 
 router.get("/:id/bookings/:bid/credit-note.pdf", (req, res) =>
   creditNotePdf(req, res, requireOwner, requireId, buildParticipationPdf),
+);
+
+router.get("/:id/documents/billing-invoices/:documentId/download", (req, res) =>
+  downloadBillingInvoice(req, res, requireOwner, requireId),
 );
 
 module.exports = router;
