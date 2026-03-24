@@ -1,4 +1,3 @@
-// routes/datev/helpers/creditNoteHelpers.js
 "use strict";
 
 const {
@@ -13,6 +12,7 @@ function isCreditInvoiceRef(reference) {
   const note = safeLower(reference?.note);
   const number = safeText(reference?.number);
   const amount = Number(reference?.amount);
+
   if (note.includes("gutschrift")) return true;
   if (number.toUpperCase().startsWith("GS")) return true;
   return Number.isFinite(amount) && amount < 0;
@@ -28,15 +28,27 @@ function normalizeCreditReference(reference) {
   const amount = Math.abs(
     Number(reference?.amount || reference?.finalPrice || 0),
   );
+
   if (!number || !Number.isFinite(amount) || amount <= 0) return null;
-  return { number, amount, date: reference?.date || null };
+
+  return {
+    number,
+    amount,
+    date: reference?.date || null,
+  };
 }
 
 function buildMetaCreditReference(booking, offer) {
   const number = safeText(booking?.meta?.creditNoteNo);
   const amount = buildMetaCreditAmount(booking, offer);
+
   if (!number || !amount) return null;
-  return { number, amount, date: buildMetaCreditDate(booking) };
+
+  return {
+    number,
+    amount,
+    date: buildMetaCreditDate(booking),
+  };
 }
 
 function buildMetaCreditAmount(booking, offer) {
@@ -44,6 +56,7 @@ function buildMetaCreditAmount(booking, offer) {
   const fallback =
     booking?.priceAtBooking ?? booking?.stornoAmount ?? offer?.price;
   const amount = Math.abs(Number(raw ?? fallback ?? 0));
+
   return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
@@ -59,6 +72,7 @@ function buildMetaCreditDate(booking) {
 
 function buildInvoiceRefCredits(booking) {
   const refs = Array.isArray(booking?.invoiceRefs) ? booking.invoiceRefs : [];
+
   return refs
     .filter(isCreditInvoiceRef)
     .map(normalizeCreditReference)
@@ -73,6 +87,7 @@ function compareCreditReferences(left, right) {
 function pickFinalCreditReference(booking, offer) {
   const metaCredit = buildMetaCreditReference(booking, offer);
   if (metaCredit) return metaCredit;
+
   const invoiceRefCredits = buildInvoiceRefCredits(booking);
   return invoiceRefCredits[0] || null;
 }
@@ -80,8 +95,14 @@ function pickFinalCreditReference(booking, offer) {
 function buildFallbackStornoReference(booking, offer) {
   const number = safeText(booking?.stornoNo || booking?.stornoNumber);
   const amount = pickStornoAmount(booking, offer);
+
   if (!number || !amount) return null;
-  return { number, amount, date: buildFallbackStornoDate(booking) };
+
+  return {
+    number,
+    amount,
+    date: buildFallbackStornoDate(booking),
+  };
 }
 
 function buildFallbackStornoDate(booking) {
@@ -100,14 +121,27 @@ function pushCreditRowForBooking(args) {
   const finalCredit = pickFinalCreditReference(args.booking, args.offer);
   const pushedFinal = pushSingleCreditRow({ ...args, creditRef: finalCredit });
   if (pushedFinal) return;
+
   const fallback = buildFallbackStornoReference(args.booking, args.offer);
   const pushedFallback = pushSingleCreditRow({ ...args, creditRef: fallback });
-  if (!pushedFallback) args.stats.stornoSkip += 1;
+
+  if (!pushedFallback) {
+    args.stats.stornoSkip += 1;
+  }
 }
 
 function pushSingleCreditRow(args) {
   const ref = args.creditRef;
   if (!hasExportableCreditReference(ref, args.from, args.to)) return false;
+
+  const dedupeKey = buildStrongCreditDedupeKey(args, ref);
+  if (isDuplicateCredit(args, dedupeKey)) {
+    incrementDuplicateCreditStat(args.stats);
+    return true;
+  }
+
+  rememberCreditKey(args, dedupeKey);
+
   const row = buildCreditDatevRow(args, ref);
   pushReadableRow(args.readableRows, args.extfRows, row);
   incrementCreditStat(args.stats, ref, args.booking, args.offer);
@@ -117,6 +151,36 @@ function pushSingleCreditRow(args) {
 function hasExportableCreditReference(reference, from, to) {
   if (!reference?.number || !reference?.date) return false;
   return isInsideDateRange(reference.date, from, to);
+}
+
+function buildStrongCreditDedupeKey(args, reference) {
+  const number = safeText(reference?.number).toUpperCase();
+  if (number) return `credit:${number}`;
+
+  const fallback = args.buildCreditExportKey
+    ? args.buildCreditExportKey(
+        reference?.number,
+        args.booking?.bookingId || args.booking?._id,
+      )
+    : "";
+
+  return fallback;
+}
+
+function isDuplicateCredit(args, dedupeKey) {
+  if (!dedupeKey) return false;
+  return Boolean(args.exportState?.creditKeys?.has(dedupeKey));
+}
+
+function rememberCreditKey(args, dedupeKey) {
+  if (!dedupeKey) return;
+  args.exportState?.creditKeys?.add(dedupeKey);
+}
+
+function incrementDuplicateCreditStat(stats) {
+  if (!stats) return;
+  stats.skippedDuplicateCredits =
+    Number(stats.skippedDuplicateCredits || 0) + 1;
 }
 
 function buildCreditDatevRow(args, reference) {
@@ -135,8 +199,13 @@ function buildCreditDatevRow(args, reference) {
 function incrementCreditStat(stats, reference, booking, offer) {
   const fallback = buildFallbackStornoReference(booking, offer);
   const isFallback = fallback && fallback.number === reference?.number;
-  if (isFallback) stats.stornoOk += 1;
-  else stats.creditOk += 1;
+
+  if (isFallback) {
+    stats.stornoOk += 1;
+    return;
+  }
+
+  stats.creditOk += 1;
 }
 
 module.exports = {
