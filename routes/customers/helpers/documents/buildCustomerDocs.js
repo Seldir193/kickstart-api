@@ -1,4 +1,3 @@
-// routes/customers/helpers/documents/buildCustomerDocs.js
 "use strict";
 
 function dunningStageLabel(stage) {
@@ -62,6 +61,38 @@ function bookingDocHref(bid, type) {
   )}`;
 }
 
+function buildInvoiceDoc(bid, baseTitle, common, booking) {
+  const invoiceNo = safeText(booking.invoiceNumber || booking.invoiceNo);
+  if (!invoiceNo) return null;
+
+  return {
+    id: `${bid}:invoice`,
+    type: "invoice",
+    title: `Rechnung – ${baseTitle}`,
+    issuedAt: booking.invoiceDate || booking.date || booking.createdAt,
+    href: bookingDocHref(bid, "participation"),
+    amount: common.originalInvoiceAmount || 0,
+    invoiceNo,
+    ...common,
+  };
+}
+
+function buildParticipationDoc(bid, baseTitle, common, booking) {
+  const invoiceNo = safeText(booking.invoiceNumber || booking.invoiceNo);
+  if (!invoiceNo) return null;
+
+  return {
+    id: `${bid}:participation`,
+    type: "participation",
+    title: `Teilnahmebestätigung – ${baseTitle}`,
+    issuedAt: booking.invoiceDate || booking.date || booking.createdAt,
+    href: bookingDocHref(bid, "participation"),
+    amount: common.originalInvoiceAmount || 0,
+    invoiceNo,
+    ...common,
+  };
+}
+
 function build_booking_docs(customer, opts) {
   const docs = [];
   const cid = String(customer?._id || "");
@@ -75,8 +106,6 @@ function build_booking_docs(customer, opts) {
     if (!childMatches(b, childUid, childFirst, childLast)) continue;
 
     const baseTitle = `${b.offerTitle || b.offerType || "Angebot"}`;
-
-    const foNo = String(b.invoiceNumber || b.invoiceNo || "").trim();
     const kndNo = String(b.cancellationNo || b.cancellationNumber || "").trim();
     const stoNo = String(b.stornoNo || b.stornoNumber || "").trim();
 
@@ -113,18 +142,11 @@ function build_booking_docs(customer, opts) {
       });
     }
 
-    if (foNo) {
-      docs.push({
-        id: `${bid}:participation`,
-        type: "participation",
-        title: `Teilnahmebestätigung – ${baseTitle}`,
-        issuedAt: b.invoiceDate || b.date || b.createdAt,
-        href: bookingDocHref(bid, "participation"),
-        amount: common.originalInvoiceAmount || 0,
-        invoiceNo: foNo,
-        ...common,
-      });
-    }
+    const invoiceDoc = buildInvoiceDoc(bid, baseTitle, common, b);
+    if (invoiceDoc) docs.push(invoiceDoc);
+
+    const participationDoc = buildParticipationDoc(bid, baseTitle, common, b);
+    if (participationDoc) docs.push(participationDoc);
 
     if (kndNo) {
       const issued = b.cancelDate || b.updatedAt || b.createdAt;
@@ -291,6 +313,24 @@ module.exports = {
 //   return true;
 // }
 
+// function hasContractMeta(b) {
+//   const meta = b && typeof b.meta === "object" ? b.meta : {};
+//   const signedAt = safeText(meta.contractSignedAt);
+//   const html = safeText(meta?.contractSnapshot?.contractDoc?.contentHtml);
+//   return Boolean(signedAt && html);
+// }
+
+// function contractSignedAt(b) {
+//   const meta = b && typeof b.meta === "object" ? b.meta : {};
+//   return meta.contractSignedAt || null;
+// }
+
+// function bookingDocHref(bid, type) {
+//   return `/api/admin/bookings/${encodeURIComponent(bid)}/documents/${encodeURIComponent(
+//     type,
+//   )}`;
+// }
+
 // function build_booking_docs(customer, opts) {
 //   const docs = [];
 //   const cid = String(customer?._id || "");
@@ -329,13 +369,26 @@ module.exports = {
 //       childLastName: safeText(b.childLastName),
 //     };
 
+//     if (hasContractMeta(b)) {
+//       docs.push({
+//         id: `${bid}:contract`,
+//         type: "contract",
+//         title: `Vertrag – ${baseTitle}`,
+//         issuedAt: contractSignedAt(b) || b.updatedAt || b.createdAt,
+//         href: bookingDocHref(bid, "contract"),
+//         amount: 0,
+//         invoiceNo: "",
+//         ...common,
+//       });
+//     }
+
 //     if (foNo) {
 //       docs.push({
 //         id: `${bid}:participation`,
 //         type: "participation",
 //         title: `Teilnahmebestätigung – ${baseTitle}`,
 //         issuedAt: b.invoiceDate || b.date || b.createdAt,
-//         href: `/api/admin/customers/${cid}/bookings/${bid}/documents/participation`,
+//         href: bookingDocHref(bid, "participation"),
 //         amount: common.originalInvoiceAmount || 0,
 //         invoiceNo: foNo,
 //         ...common,
@@ -350,7 +403,7 @@ module.exports = {
 //         type: "cancellation",
 //         title: `Kündigungsbestätigung – ${baseTitle}`,
 //         issuedAt: issued,
-//         href: `/api/admin/customers/${cid}/bookings/${bid}/documents/cancellation`,
+//         href: bookingDocHref(bid, "cancellation"),
 //         amount: 0,
 //         invoiceNo: kndNo,
 //         ...common,
@@ -365,7 +418,7 @@ module.exports = {
 //         type: "storno",
 //         title: `Storno-Rechnung – ${baseTitle}`,
 //         issuedAt: issued,
-//         href: `/api/admin/customers/${cid}/bookings/${bid}/documents/storno`,
+//         href: bookingDocHref(bid, "storno"),
 //         amount:
 //           b?.stornoAmount != null
 //             ? toNumber(b.stornoAmount, 0)
@@ -419,13 +472,17 @@ module.exports = {
 //       customerId: cid,
 //       type: "dunning",
 //       stage: doc.stage || "",
-//       title: `${dunningStageLabel(doc.stage)}${doc.invoiceNo ? ` – ${doc.invoiceNo}` : ""}`,
+//       title: `${dunningStageLabel(doc.stage)}${
+//         doc.invoiceNo ? ` – ${doc.invoiceNo}` : ""
+//       }`,
 //       issuedAt: doc.sentAt || doc.createdAt || null,
 //       status: "open",
 //       offerTitle: booking.offerTitle || doc.offerTitle || "",
 //       offerType: "dunning",
 //       subject: doc.subject || "",
-//       href: `/api/admin/invoices/dunning-documents/${encodeURIComponent(did)}/download`,
+//       href: `/api/admin/invoices/dunning-documents/${encodeURIComponent(
+//         did,
+//       )}/download`,
 //       invoiceNo: doc.invoiceNo || "",
 //       invoiceDate: doc.sentAt || doc.createdAt || null,
 //       cancellationNo: "",

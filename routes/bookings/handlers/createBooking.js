@@ -135,8 +135,16 @@ function holidayToOffer(offer) {
   );
 }
 
+// function normalizeVoucherRaw(v) {
+//   return safeText(v).toUpperCase();
+// }
+
 function normalizeVoucherRaw(v) {
-  return safeText(v).toUpperCase();
+  const value = safeText(v).toUpperCase();
+  if (!value) return "";
+  if (value === "-") return "";
+  if (value === "—") return "";
+  return value;
 }
 
 function parseLabeledValue(message, label) {
@@ -1293,7 +1301,28 @@ function clubDuplicateLogPayload(ctx, customerEmail) {
   };
 }
 
+function requestedTargetFromBody(body) {
+  const raw =
+    body?.bookingTarget || body?.scope || body?.target || body?.mode || "";
+  const value = safeText(raw).toLowerCase();
+  if (value === "self") return "self";
+  if (value === "child") return "child";
+  return "";
+}
+
+function normalizedChildUidFromBody(body) {
+  const target = requestedTargetFromBody(body);
+  if (target === "self") return "";
+  return safeText(body?.childUid);
+}
+
 async function createBookingCore({ body, providerId }) {
+  const normalizedChildUid = normalizedChildUidFromBody(body);
+  const normalizedBody = {
+    ...body,
+    childUid: normalizedChildUid,
+  };
+
   const ctx = await buildCreateContext(body, providerId);
   const invoiceTo = buildInvoiceToFromBody(body);
   const bookingSource = bookingSourceFromBody(body);

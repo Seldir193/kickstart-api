@@ -47,7 +47,8 @@ async function upsertCustomerBookingRef(customer, booking, offer) {
   const bid = safeText(booking._id);
   if (!bid) return;
 
-  const child = customer.child || {};
+  const isSelfBooking = !safeText(booking?.childUid);
+
   const patch = {
     bookingId: booking._id,
     offerId: booking.offerId || offer?._id,
@@ -63,9 +64,12 @@ async function upsertCustomerBookingRef(customer, booking, offer) {
     invoiceNumber: safeText(booking.invoiceNumber || booking.invoiceNo || ""),
     invoiceNo: safeText(booking.invoiceNo || ""),
     invoiceDate: booking.invoiceDate || null,
-    childUid: safeText(child.uid),
-    childFirstName: safeText(child.firstName),
-    childLastName: safeText(child.lastName),
+    childUid: isSelfBooking ? "" : safeText(booking?.childUid),
+    childFirstName: isSelfBooking ? "" : safeText(booking?.firstName),
+    childLastName: isSelfBooking ? "" : safeText(booking?.lastName),
+    parentEmail: safeText(booking?.invoiceTo?.parent?.email || booking?.email),
+    parentFirstName: safeText(booking?.invoiceTo?.parent?.firstName),
+    parentLastName: safeText(booking?.invoiceTo?.parent?.lastName),
   };
 
   const idx = customer.bookings.findIndex((r) => refBookingIdOf(r) === bid);
@@ -78,6 +82,45 @@ async function upsertCustomerBookingRef(customer, booking, offer) {
 
   await customer.save();
 }
+
+// async function upsertCustomerBookingRef(customer, booking, offer) {
+//   if (!customer || !booking) return;
+//   if (!Array.isArray(customer.bookings)) customer.bookings = [];
+
+//   const bid = safeText(booking._id);
+//   if (!bid) return;
+
+//   const child = customer.child || {};
+//   const patch = {
+//     bookingId: booking._id,
+//     offerId: booking.offerId || offer?._id,
+//     offerTitle: safeText(offer?.title || booking.offerTitle || ""),
+//     offerType: safeText(
+//       offer?.sub_type || offer?.type || booking.offerType || "",
+//     ),
+//     venue: safeText(offer?.location || booking?.venue || ""),
+//     date: booking.date ? new Date(booking.date) : new Date(),
+//     status: safeText(booking.status || ""),
+//     priceAtBooking: booking.priceAtBooking ?? undefined,
+//     currency: safeText(booking.currency || "EUR"),
+//     invoiceNumber: safeText(booking.invoiceNumber || booking.invoiceNo || ""),
+//     invoiceNo: safeText(booking.invoiceNo || ""),
+//     invoiceDate: booking.invoiceDate || null,
+//     childUid: safeText(child.uid),
+//     childFirstName: safeText(child.firstName),
+//     childLastName: safeText(child.lastName),
+//   };
+
+//   const idx = customer.bookings.findIndex((r) => refBookingIdOf(r) === bid);
+
+//   if (idx >= 0) {
+//     customer.bookings[idx] = { ...(customer.bookings[idx] || {}), ...patch };
+//   } else {
+//     customer.bookings.push({ _id: booking._id, ...patch });
+//   }
+
+//   await customer.save();
+// }
 
 async function findCustomerForBooking(ownerId, booking) {
   let customer = await Customer.findOne({
