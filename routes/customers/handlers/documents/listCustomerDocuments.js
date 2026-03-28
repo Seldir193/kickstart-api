@@ -1,3 +1,4 @@
+//routes\customers\handlers\documents\listCustomerDocuments.js
 "use strict";
 
 const mongoose = require("mongoose");
@@ -39,7 +40,15 @@ function dedupeDocs(items) {
       continue;
     }
 
-    const key = `${bookingId}::${invoiceNo}`;
+    // const key = `${bookingId}::${invoiceNo}`;
+
+    const stage = safeText(item?.stage).toLowerCase();
+
+    const key =
+      type === "dunning"
+        ? `${bookingId}::${invoiceNo}::${type}::${stage}`
+        : `${bookingId}::${invoiceNo}::${type}`;
+
     const existing = map.get(key);
 
     if (!existing) {
@@ -518,6 +527,12 @@ async function listCustomerDocuments(req, res, requireOwner, requireId) {
     if (childUid) {
       filtered = filtered.filter((d) => safeText(d?.childUid) === childUid);
     }
+
+    // if (childUid) {
+    //   filtered = filtered.filter((d) => {
+    //     return safeText(d?.childUid || d?.bookingChildUid) === childUid;
+    //   });
+    // }
 
     if (parentEmail) {
       filtered = filtered.filter(
