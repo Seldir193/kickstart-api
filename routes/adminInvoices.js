@@ -342,9 +342,18 @@ function docsFromBooking(customer, b, state) {
       customerName: customerName || undefined,
       customerChildName: customerChildName || undefined,
       creditNoteNo: creditNo,
-      href: `/api/admin/customers/bookings/${encodeURIComponent(
-        bookingRefId,
-      )}/credit-note.pdf`,
+      // href: `/api/admin/customers/bookings/${encodeURIComponent(
+      //   bookingRefId,
+      // )}/credit-note.pdf`,
+
+      href: `/api/admin/customers/${encodeURIComponent(
+        String(customer._id),
+      )}/bookings/${encodeURIComponent(bookingRefId)}/credit-note.pdf`,
+      exportHref: `/api/admin/customers/${encodeURIComponent(
+        String(customer._id),
+      )}/bookings/${encodeURIComponent(bookingRefId)}/credit-note.pdf`,
+      fileName: `Gutschrift-${creditNo.replace(/[^\w.-]+/g, "_")}`,
+
       fileName: `Gutschrift-${creditNo.replace(/[^\w.-]+/g, "_")}`,
     });
   }
