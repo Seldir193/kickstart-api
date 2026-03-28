@@ -1,3 +1,4 @@
+//utils\mailer\revocationLinks.js
 "use strict";
 
 const crypto = require("crypto");
@@ -23,7 +24,33 @@ function websiteBaseUrl() {
   );
 }
 
+// async function ensureRevocationLink(booking) {
+//   const { rawToken, tokenHash } = createRevocationTokenPair();
+
+//   booking.revocationTokenHash = tokenHash;
+//   booking.revocationTokenExpires = new Date(
+//     Date.now() + 1000 * 60 * 60 * 24 * 30,
+//   );
+
+//   await booking.save();
+
+//   const base = websiteBaseUrl();
+//   const revocationUrl = `${String(base).replace(/\/+$/, "")}/weekly/revoke?token=${encodeURIComponent(rawToken)}`;
+
+//   return {
+//     created: true,
+//     revocationUrl,
+//   };
+// }
+
 async function ensureRevocationLink(booking) {
+  if (!booking || typeof booking.save !== "function") {
+    return {
+      created: false,
+      revocationUrl: "",
+    };
+  }
+
   const { rawToken, tokenHash } = createRevocationTokenPair();
 
   booking.revocationTokenHash = tokenHash;

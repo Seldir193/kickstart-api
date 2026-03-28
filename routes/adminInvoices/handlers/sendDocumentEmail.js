@@ -87,11 +87,20 @@ function makeSendDocumentEmailHandler(deps) {
 
       const mailer = getMailer();
 
+      // if (docType === "participation") {
+      //   await mailer.sendParticipationEmail({
+      //     to: toEmail,
+      //     customer,
+      //     booking: mergedBooking,
+      //     offer,
+      //   });
+      // }
+
       if (docType === "participation") {
         await mailer.sendParticipationEmail({
           to: toEmail,
           customer,
-          booking: mergedBooking,
+          booking,
           offer,
         });
       }
