@@ -1,3 +1,4 @@
+//routes\franchiseLocations.logic.js
 "use strict";
 
 const mongoose = require("mongoose");
@@ -252,12 +253,30 @@ async function getPublicList(_req, res) {
   }
 }
 
+// async function getMine(req, res) {
+//   try {
+//     const q = ownerMatchFilter(req);
+//     const items = await FranchiseLocation.find(q)
+//       .sort({ createdAt: -1 })
+//       .lean();
+//     return ok(res, { items: items.map(mapDoc) });
+//   } catch {
+//     return bad(res, 500, "Server error");
+//   }
+// }
 async function getMine(req, res) {
   try {
     const q = ownerMatchFilter(req);
+    const view = cleanStr(req.query?.view).toLowerCase();
+
+    if (view === "mine_pending") q.status = "pending";
+    if (view === "mine_approved") q.status = "approved";
+    if (view === "mine_rejected") q.status = "rejected";
+
     const items = await FranchiseLocation.find(q)
       .sort({ createdAt: -1 })
       .lean();
+
     return ok(res, { items: items.map(mapDoc) });
   } catch {
     return bad(res, 500, "Server error");

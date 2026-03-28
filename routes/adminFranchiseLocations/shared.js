@@ -181,17 +181,33 @@ function mineViewQuery(v, myOwnerId, pid, common) {
   throw Object.assign(new Error("Invalid view"), { statusCode: 400 });
 }
 
+// function mineApproved(myOwnerId, pid, common) {
+//   return {
+//     ...common,
+//     ...ownerOr(myOwnerId, pid),
+//     status: "approved",
+//     submittedAt: null,
+//   };
+// }
+
 function mineApproved(myOwnerId, pid, common) {
   return {
-    ...common,
-    ...ownerOr(myOwnerId, pid),
-    status: "approved",
-    submittedAt: null,
+    $and: [
+      common,
+      ownerOr(myOwnerId, pid),
+      { status: "approved", submittedAt: null },
+    ],
   };
 }
 
+// function minePending(myOwnerId, pid, common) {
+//   return { ...common, ...ownerOr(myOwnerId, pid), $or: minePendingOr() };
+// }
+
 function minePending(myOwnerId, pid, common) {
-  return { ...common, ...ownerOr(myOwnerId, pid), $or: minePendingOr() };
+  return {
+    $and: [common, ownerOr(myOwnerId, pid), { $or: minePendingOr() }],
+  };
 }
 
 function minePendingOr() {
@@ -201,8 +217,14 @@ function minePendingOr() {
   ];
 }
 
+// function mineRejected(myOwnerId, pid, common) {
+//   return { ...common, ...ownerOr(myOwnerId, pid), status: "rejected" };
+// }
+
 function mineRejected(myOwnerId, pid, common) {
-  return { ...common, ...ownerOr(myOwnerId, pid), status: "rejected" };
+  return {
+    $and: [common, ownerOr(myOwnerId, pid), { status: "rejected" }],
+  };
 }
 
 function providerViewQuery(v, myOwnerId, pid, common) {
@@ -213,16 +235,34 @@ function providerViewQuery(v, myOwnerId, pid, common) {
   throw Object.assign(new Error("Invalid view"), { statusCode: 400 });
 }
 
+// function providerApproved(common, base) {
+//   return { ...common, ...base, status: "approved" };
+// }
+
+// function providerPending(common, base) {
+//   return { ...common, ...base, $or: minePendingOr() };
+// }
+
+// function providerRejected(common, base) {
+//   return { ...common, ...base, status: "rejected" };
+// }
+
 function providerApproved(common, base) {
-  return { ...common, ...base, status: "approved" };
+  return {
+    $and: [common, base, { status: "approved" }],
+  };
 }
 
 function providerPending(common, base) {
-  return { ...common, ...base, $or: minePendingOr() };
+  return {
+    $and: [common, base, { $or: minePendingOr() }],
+  };
 }
 
 function providerRejected(common, base) {
-  return { ...common, ...base, status: "rejected" };
+  return {
+    $and: [common, base, { status: "rejected" }],
+  };
 }
 
 function viewQuery(view, myOwnerId, pid, common, superUser) {
