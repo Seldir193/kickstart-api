@@ -239,7 +239,22 @@ async function upsertCustomerForBooking({
     priceFirstMonth: snapFirstMonth,
   };
 
+  //let customer = null;
+
+  const requestedCustomerId = safeText(payload?.customerId);
+
   let customer = null;
+
+  if (requestedCustomerId) {
+    customer = await Customer.findOne({
+      _id: requestedCustomerId,
+      owner: ownerId,
+    });
+
+    if (!customer) {
+      throw new Error("Referenced customerId not found for booking.");
+    }
+  }
 
   const isPowerByOffer = isPowertrainingOffer(offer);
   const isCampByOffer = isCampOffer(offer);

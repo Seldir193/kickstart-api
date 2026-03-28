@@ -1,3 +1,4 @@
+//routes\customers\handlers\bookings\addAdminBooking.js
 "use strict";
 
 const mongoose = require("mongoose");

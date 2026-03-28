@@ -1,3 +1,4 @@
+//routes\bookings\handlers\confirmBooking.js
 "use strict";
 
 const crypto = require("crypto");
