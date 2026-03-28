@@ -145,8 +145,19 @@ function fullName(p) {
   return [first, last].filter(Boolean).join(" ").trim();
 }
 
-function customerNameFrom(customer) {
-  return fullName(customer?.parent) || "";
+// function customerNameFrom(customer) {
+//   return fullName(customer?.parent) || "";
+// }
+
+function customerNameFrom(customer, bookingRef) {
+  return (
+    fullName({
+      firstName: bookingRef?.parentFirstName,
+      lastName: bookingRef?.parentLastName,
+    }) ||
+    fullName(customer?.parent) ||
+    ""
+  );
 }
 
 function customerChildNameFrom(customer) {
@@ -157,7 +168,8 @@ function docsFromBooking(customer, b, state) {
   const items = [];
   const baseTitle = b.offerTitle || b.offerType || "Booking";
 
-  const customerName = customerNameFrom(customer);
+  //const customerName = customerNameFrom(customer);
+  const customerName = customerNameFrom(customer, b);
   const customerChildName = customerChildNameFrom(customer);
 
   const bookingRefId = String(b.bookingId || b._id || "").trim();
@@ -589,7 +601,8 @@ function recurringInvoiceHref(item) {
 }
 
 function mapRecurringInvoiceDocToRow(doc, customer, booking) {
-  const customerName = customerNameFrom(customer);
+  //const customerName = customerNameFrom(customer);
+  const customerName = customerNameFrom(customer, booking);
   const customerChildName = customerChildNameFrom(customer);
   const invoiceNo = String(doc?.invoiceNo || "").trim();
   const discountMeta = resolveGlobalDiscountMeta(booking, invoiceNo, "invoice");
