@@ -14,15 +14,6 @@ const { updateCustomer } = require("./customers/handlers/updateCustomer");
 const { deleteCustomer } = require("./customers/handlers/deleteCustomer");
 const { cancelCustomerAll } = require("./customers/handlers/cancelCustomerAll");
 
-router.post("/:id/bookings", (req, res) => {
-  console.log("[customers route] /:id/bookings hit", {
-    url: req.originalUrl,
-    method: req.method,
-    body: req.body,
-  });
-  return addAdminBooking(req, res, requireOwner, requireId);
-});
-
 const {
   participationPdf,
 } = require("./customers/handlers/documents/participationPdf");
