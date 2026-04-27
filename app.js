@@ -293,6 +293,9 @@ mongoose.set("strictQuery", true);
     app.use("/api/news", require("./routes/news"));
     app.use("/api/admin/news", require("./routes/adminNews"));
 
+    app.use("/api/feedbacks", require("./routes/feedbacks"));
+    app.use("/api/admin/feedbacks", require("./routes/adminFeedbacks"));
+
     app.use("/api/admin/bookings", require("./routes/adminBookings"));
 
     app.use("/api/public", require("./routes/publicBookingEligibility"));

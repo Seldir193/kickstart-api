@@ -48,30 +48,6 @@ async function persistBooking(booking) {
   return null;
 }
 
-// /* ---------- intern: Booking sicher speichern (Subdoc oder Model) ---------- */
-// async function persistBooking(booking) {
-//   // Eigenständiges Mongoose-Doc?
-//   if (booking && typeof booking.save === "function") {
-//     return booking.save();
-//   }
-//   // Eingebettetes Subdoc → über Parent speichern
-//   const parent =
-//     booking && typeof booking.ownerDocument === "function"
-//       ? booking.ownerDocument()
-//       : null;
-//   if (parent && typeof parent.save === "function") {
-//     // Pfad markieren (bei Arrays z.B. "bookings")
-//     // Notfalls grob "bookings" markieren – reicht i.d.R. aus.
-//     try {
-//       parent.markModified(booking?.$basePath || "bookings");
-//     } catch (_) {
-//       parent.markModified("bookings");
-//     }
-//     return parent.save();
-//   }
-//   // Fallback: nichts zu tun
-//   return null;
-// }
 
 /* ---------- Hilfsfunktionen ---------- */
 function parseISODate(iso) {
@@ -122,31 +98,6 @@ function fmtAmount(n) {
 function normCurrency(c) {
   return String(c || "EUR").toUpperCase();
 }
-
-// /* ---------- Nummern-/Daten-Zuweisung ---------- */
-// async function assignInvoiceData({ booking, offer, providerId = "1" }) {
-//   //const code =
-//   // (offer && (offer.code || typeCodeFromOfferType(offer.type))) || 'XX';
-//   const code = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
-//   const year = yearFrom();
-//   const seq = await nextSequence(`invoice:${code}:${year}`);
-
-//   booking.invoiceNumber = formatNumber(providerId, code, year, seq);
-//   booking.invoiceDate = new Date();
-
-//   // Monatsbetrag „einfrieren“
-//   if (
-//     booking.priceAtBooking == null &&
-//     offer &&
-//     typeof offer.price === "number"
-//   ) {
-//     booking.priceAtBooking = offer.price;
-//   }
-
-//   await persistBooking(booking);
-
-//   return booking;
-// }
 
 async function assignInvoiceData({ booking, offer, providerId = "1" }) {
   const code = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
@@ -262,42 +213,6 @@ async function assignCreditNoteData({
   await persistBooking(booking);
   return booking;
 }
-
-// async function assignCreditNoteData({
-//   booking,
-//   offer,
-//   amount,
-//   providerId = "1",
-//   creditDate = new Date(),
-// }) {
-//   const baseCode = (offer && (offer.code || typeCodeFromOffer(offer))) || "XX";
-//   const creditCode = `GS${String(baseCode).toUpperCase()}`;
-//   const year = yearFrom();
-//   const seq = await nextSequence(`creditnote:${creditCode}:${year}`);
-
-//   const meta =
-//     booking.meta && typeof booking.meta === "object" ? booking.meta : {};
-//   booking.meta = meta;
-
-//   freezeOfferSnapshot(booking, offer);
-
-//   meta.creditNoteNo = formatNumber(providerId, creditCode, year, seq);
-//   meta.creditNoteDate = creditDate.toISOString();
-
-//   const raw = amount != null ? Number(amount) : NaN;
-//   const eff = Number.isFinite(raw)
-//     ? raw
-//     : typeof booking.priceAtBooking === "number"
-//       ? booking.priceAtBooking
-//       : offer && typeof offer.price === "number"
-//         ? offer.price
-//         : undefined;
-
-//   if (eff !== undefined) meta.creditNoteAmount = Math.round(eff * 100) / 100;
-
-//   await persistBooking(booking);
-//   return booking;
-// }
 
 /* ---------- Exports ---------- */
 module.exports = {
