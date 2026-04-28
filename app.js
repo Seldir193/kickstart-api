@@ -296,6 +296,9 @@ mongoose.set("strictQuery", true);
     app.use("/api/feedbacks", require("./routes/feedbacks"));
     app.use("/api/admin/feedbacks", require("./routes/adminFeedbacks"));
 
+    app.use("/api/public/partners", require("./routes/partners"));
+    app.use("/api/admin/partners", require("./routes/adminPartners"));
+
     app.use("/api/admin/bookings", require("./routes/adminBookings"));
 
     app.use("/api/public", require("./routes/publicBookingEligibility"));
